@@ -1,0 +1,293 @@
+/* src/components/InputModal/InputModal.css */
+/* --- Popup paste (InputModal) --- */
+/* E:\3_CODING\Personally\english_practice\src\components\InputModal\InputModal.css */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal {
+  width: min(640px, 92vw);
+  background: #fff;
+  color: #000;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.2);
+  overflow: hidden;
+}
+
+body.dark .modal {
+  background: #2d2d2d;
+  color: #f1f1f1;
+  border-color: #555;
+}
+
+.modal-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid #eee;
+}
+
+body.dark .modal-header {
+  border-color: #444;
+}
+
+.modal-body {
+  padding: 12px 14px;
+}
+
+/* --- Percent row --- */
+.modal-body .percent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.modal-body .percent-row label {
+  font-size: 13px;
+  opacity: .85;
+  min-width: 84px; /* căn hàng label gọn gàng */
+}
+
+.modal-body .percent-row input[type="number"] {
+  width: 110px;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #fff;
+  color: #000;
+}
+
+.modal-body .percent-row .percent-suffix {
+  margin-left: 2px;
+  opacity: .9;
+}
+
+body.dark .percent-row input[type="number"] {
+  background: #1f1f1f;
+  color: #f1f1f1;
+  border-color: #555;
+}
+
+.modal-body textarea {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  font: 14px/1.6 "Times New Roman", Times, serif;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  color: #000;
+}
+
+body.dark .modal-body textarea {
+  background: #1f1f1f;
+  color: #f1f1f1;
+  border-color: #555;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 10px 14px;
+  border-top: 1px solid #eee;
+}
+
+body.dark .modal-actions {
+  border-color: #444;
+}
+
+/* Reuse small button size inside modal (and elsewhere if needed) */
+.btn-small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid #eee;
+  flex-wrap: wrap;
+}
+
+.modal-actions .action-left,
+.modal-actions .action-right {
+  flex: 1;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.modal-actions .action-right {
+  justify-content: flex-end;
+}
+
+.modal-actions .action-center {
+  flex: 2;
+  display: flex;
+  justify-content: center;
+}
+
+.toggle-btn.btn-large {
+  padding: 8px 20px;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.main-send-btn {
+  background-color: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.main-send-btn:hover {
+  background-color: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid #eee;
+  flex-wrap: wrap;
+}
+
+.modal-actions .action-left,
+.modal-actions .action-right {
+  flex: 1;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.modal-actions .action-right {
+  justify-content: flex-end;
+}
+
+.modal-actions .action-center {
+  flex: 2;
+  display: flex;
+  justify-content: center;
+}
+
+.toggle-btn.btn-large {
+  padding: 10px 20px;
+  font-weight: bold;
+  font-size: 15px;
+}
+
+.main-send-btn {
+  background-color: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.main-send-btn:hover {
+  background-color: #1d4ed8;
+  border-color: #1d4ed8;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+  margin-bottom: 16px;
+  font-size: 18px;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-body textarea {
+  width: 100%;
+  min-height: 160px;
+  padding: 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  resize: vertical;
+}
+
+.percent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.percent-row input {
+  width: 80px;
+  padding: 4px 6px;
+}
+
+.percent-suffix {
+  font-weight: bold;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+  gap: 12px;
+}
+
+.action-left,
+.action-center,
+.action-right {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  background: #eee;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-large {
+  font-size: 16px;
+  padding: 10px 20px;
+}
+
+.main-send-btn {
+  background: #007aff;
+  color: white;
+}
+
+.main-send-btn:hover {
+  background: #005fc1;
+}
+
