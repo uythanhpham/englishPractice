@@ -4,6 +4,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './PracticingSpace.css';
 import InputModal from '../InputModal/InputModal';
+import Tabbar from '../Tabbar/Tabbar';
+import PictureFrame from '../PictureFrame/PictureFrame';
 
 const INITIAL_TEXT = `Ví dụ: Hello [world] and [friends]!
 A link or [placeholder] appears here.] Tiếp tục...`;
@@ -380,8 +382,17 @@ const PracticingSpace: React.FC = () => {
     }
   };
 
-  // UI handlers
-  const toggleColor = () => {
+  // ===== Handlers cho Tabbar =====
+  const handleToggleDark = () => setDark((d) => !d);
+
+  const handleChangeColorHex = (hex: string) => {
+    setColorHex(hex);
+    if (colorOn) {
+      applyTypingColor(hex);
+    }
+  };
+
+  const handleToggleColor = () => {
     const next = !colorOn;
     setColorOn(next);
     if (next) enforceTypingColor();
@@ -409,58 +420,37 @@ const PracticingSpace: React.FC = () => {
     });
   };
 
-  // 🔗 NHẬN converted từ InputModal và đổ vào editor
+  // Nhận converted từ InputModal
   const handleReceiveConverted = (convertedText: string) => {
     setShowPaste(false);
     requestAnimationFrame(() => {
-      setEditorText(convertedText); // thay toàn bộ nội dung editor
+      setEditorText(convertedText);
     });
   };
 
   return (
     <div className="wrap">
-      <div className="toolbar">
-        <button
-          className={`toggle-btn${dark ? ' active' : ''}`}
-          id="toggleDark"
-          onClick={() => setDark(d => !d)}
-        >
-          {dark ? '☀️ Light Mode' : '🌙 Dark Mode'}
-        </button>
+      {/* Tabbar tách riêng */}
+      <Tabbar
+        dark={dark}
+        onToggleDark={handleToggleDark}
+        colorHex={colorHex}
+        onChangeColorHex={handleChangeColorHex}
+        colorOn={colorOn}
+        onToggleColor={handleToggleColor}
+        onOpenPaste={openPasteModal}
+      />
 
-        <div className="color-wrap">
-          <input
-            type="color"
-            id="colorPicker"
-            value={colorHex}
-            onChange={(e) => {
-              setColorHex(e.target.value);
-              if (colorOn) enforceTypingColor();
-            }}
-          />
-        </div>
-
-        <button
-          className={`toggle-btn${colorOn ? ' active' : ''}`}
-          id="toggleColor"
-          aria-pressed={colorOn}
-          title="Bật/Tắt chế độ gõ có màu"
-          onClick={toggleColor}
-        >
-          {colorOn ? '🎨 Color: ON' : '🎨 Color: OFF'}
-        </button>
-
-        <button
-          className="toggle-btn btn-small"
-          id="openPaste"
-          title="Paste văn bản vào vị trí con trỏ"
-          onClick={openPasteModal}
-        >
-          📋 Paste
-        </button>
-      </div>
-
-      <h1>Bracket Jump Editor</h1>
+      {/* ✅ PictureFrame nằm ngay trên vùng nhập văn bản */}
+      <PictureFrame
+        width={760}
+        height={330}
+        onChange={(file, dataUrl) => {
+          // Bạn có thể lưu dataUrl vào state/global nếu muốn dùng tiếp
+          console.log('Ảnh đã nhận:', file.name, file.type, file.size);
+        }}
+        onClear={() => console.log('Đã xóa ảnh trong PictureFrame')}
+      />
 
       <div
         id="editor"
@@ -482,12 +472,8 @@ const PracticingSpace: React.FC = () => {
         confirmLabel="Chèn (Ctrl/Cmd+Enter)"
         cancelLabel="Hủy"
         autoFocus
-
-        // percent (tuỳ chọn)
         percentValue={percent}
         onPercentChange={setPercent}
-
-        // ⬇️ Nhận kết quả converted từ BE
         onReceiveConverted={handleReceiveConverted}
       />
     </div>

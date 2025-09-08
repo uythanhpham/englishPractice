@@ -9,6 +9,7 @@ body {
   background: #f6f7f8;
   margin: 0;
   padding: 24px;
+  padding-top: 0;
   transition: background 0.3s, color 0.3s;
 }
 
@@ -32,6 +33,7 @@ h1 {
   outline: none;
   background: #fff;
   color: #000;
+  padding-top: 30px;
 
   /* Text behavior */
   white-space: pre-wrap;    /* tôn trọng \n */
@@ -97,9 +99,9 @@ body.dark code {
 /* ========= Toolbar ========= */
 .toolbar { 
   display: flex; 
-  gap: 8px; 
+  gap: 0; 
   align-items: center; 
-  margin-bottom: 12px; 
+  margin-bottom: 0; 
   flex-wrap: wrap; 
 }
 
@@ -168,7 +170,7 @@ input[type="color"] {
 body.dark .modal { background:#2d2d2d; color:#f1f1f1; border-color:#555; }
 
 .modal-header {
-  padding: 10px 14px; border-bottom: 1px solid #eee;
+  padding: 0; border-bottom: 1px solid #eee;
 }
 body.dark .modal-header { border-color:#444; }
 
@@ -191,3 +193,7 @@ body.dark .modal-actions { border-color:#444; }
 
 .btn-small { padding: 4px 8px; font-size: 12px; }
     
+/* ví dụ thêm vào PracticingSpace.css */
+.picture-frame-wrap { }
+.picture-frame { transition: box-shadow .15s ease; }
+.picture-frame:focus { box-shadow: 0 0 0 2px rgba(59,130,246,.4); }

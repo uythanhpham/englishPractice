@@ -1,0 +1,92 @@
+// E:\3_CODING\Personally\english_practice\src\components\Tabbar\Tabbar.tsx
+'use client';
+
+import React from 'react';
+
+export interface TabbarProps {
+  dark: boolean;
+  onToggleDark: () => void;
+
+  colorHex: string;
+  onChangeColorHex: (hex: string) => void;
+
+  colorOn: boolean;
+  onToggleColor: () => void;
+
+  onOpenPaste: () => void;
+
+  /** Bật/tắt sticky (mặc định: true) */
+  sticky?: boolean;
+  /** Khoảng cách từ top (px) nếu muốn chừa header khác (mặc định: 0) */
+  offsetTop?: number;
+}
+
+const Tabbar: React.FC<TabbarProps> = ({
+  dark,
+  onToggleDark,
+  colorHex,
+  onChangeColorHex,
+  colorOn,
+  onToggleColor,
+  onOpenPaste,
+  sticky = true,
+  offsetTop = 0,
+}) => {
+  return (
+    <div
+      role="toolbar"
+      className={`toolbar toolbar-sticky`}
+      style={
+        sticky
+          ? {
+              position: 'sticky',
+              top: offsetTop,
+              zIndex: 50,
+              background: 'var(--toolbar-bg, rgba(255,255,255,0.85))',
+              backdropFilter: 'saturate(180%) blur(6px)',
+              WebkitBackdropFilter: 'saturate(180%) blur(6px)',
+              borderBottom: '1px solid var(--toolbar-border, #e5e7eb)',
+            }
+          : undefined
+      }
+    >
+      <button
+        className={`toggle-btn${dark ? ' active' : ''}`}
+        id="toggleDark"
+        onClick={onToggleDark}
+      >
+        {dark ? '☀️ Light Mode' : '🌙 Dark Mode'}
+      </button>
+
+      <div className="color-wrap">
+        <input
+          type="color"
+          id="colorPicker"
+          value={colorHex}
+          onChange={(e) => onChangeColorHex(e.target.value)}
+        />
+      </div>
+
+      <button
+        className={`toggle-btn${colorOn ? ' active' : ''}`}
+        id="toggleColor"
+        aria-pressed={colorOn}
+        title="Bật/Tắt chế độ gõ có màu"
+        onClick={onToggleColor}
+      >
+        {colorOn ? '🎨 Color: ON' : '🎨 Color: OFF'}
+      </button>
+
+      <button
+        className="toggle-btn btn-small"
+        id="openPaste"
+        title="Paste văn bản vào vị trí con trỏ"
+        onClick={onOpenPaste}
+      >
+        📋 Paste
+      </button>
+    </div>
+  );
+};
+
+export default Tabbar;

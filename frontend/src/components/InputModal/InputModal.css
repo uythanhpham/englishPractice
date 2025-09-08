@@ -117,7 +117,7 @@ body.dark .modal-actions {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 0;
   border-top: 1px solid #eee;
   flex-wrap: wrap;
 }
@@ -160,9 +160,8 @@ body.dark .modal-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-top: 1px solid #eee;
+  gap: 0;
+  /* border-top: 1px solid #eee; */
   flex-wrap: wrap;
 }
 
