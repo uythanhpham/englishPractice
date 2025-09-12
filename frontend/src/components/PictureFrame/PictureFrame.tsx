@@ -244,18 +244,16 @@ const PictureFrame: React.FC<PictureFrameProps> = ({
     height: typeof height === 'number' ? `${height}px` : height,
   };
 
-  // Sticky wrapper: thêm padding trái/phải và cho phép tràn ngang (nếu khung quá to)
+  // Sticky wrapper
   const stickyWrapStyle: React.CSSProperties | undefined = sticky
     ? {
         position: 'sticky',
         top: stickyOffsetTop,
         zIndex: stickyZIndex,
-        background: 'var(--pf-wrap-bg, rgba(255,255,255,0.85))',
-        backdropFilter: 'saturate(180%) blur(6px)',
-        WebkitBackdropFilter: 'saturate(180%) blur(6px)',
-        borderBottom: '0 solid var(--pf-wrap-border, #e5e7eb)',
-        padding: '0 16px',          // ← chừa chỗ 2 bên để “căn chỉnh”
-        overflowX: 'auto',             // ← nếu quá rộng, có thể kéo ngang
+        background: 'transparent',
+        borderBottom: '0 solid #000',
+        padding: '0 16px',
+        overflowX: 'auto',
       }
     : undefined;
 
@@ -275,21 +273,22 @@ const PictureFrame: React.FC<PictureFrameProps> = ({
           className="picture-frame"
           style={{
             ...frameStyle,
-            border: `1px dashed ${isFocused ? '#2563eb' : 'var(--pf-border, #999)'}`,
+            border: '1px dashed #000',       // viền ngoài màu đen
             borderRadius: 10,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'var(--pf-bg, #fafafa)',
+            background: '#000',              // NỀN KHUNG CHỨA ẢNH = ĐEN
             position: 'relative',
             overflow: 'hidden',
             userSelect: 'none',
             outline: 'none',
             padding: 0,
-            boxShadow: isFocused ? '0 0 0 3px rgba(37,99,235,0.2)' : 'none',
+            boxShadow: isFocused ? '0 0 0 3px rgba(255,255,255,0.25)' : 'none', // viền focus trắng nhẹ
             cursor: preview ? 'grab' : 'text',
             touchAction: 'none',
             margin: '0 auto',
+            color: '#fff',                   // chữ trắng để nổi trên nền đen
           }}
           onPaste={handlePaste}
           onDrop={handleDrop}
@@ -327,7 +326,7 @@ const PictureFrame: React.FC<PictureFrameProps> = ({
                 }}
               />
 
-              {/* Nút xoá (nhỏ gọn) */}
+              {/* Nút xoá: trắng để thấy rõ trên nền đen */}
               <button
                 type="button"
                 onClick={(e) => {
@@ -340,9 +339,9 @@ const PictureFrame: React.FC<PictureFrameProps> = ({
                   position: 'absolute',
                   top: 6,
                   right: 6,
-                  background: 'rgba(0,0,0,0.6)',
+                  background: 'transparent',
                   color: '#fff',
-                  border: 'none',
+                  border: '1px solid #fff',
                   borderRadius: 8,
                   padding: '2px 6px',
                   fontSize: 12,
@@ -358,7 +357,7 @@ const PictureFrame: React.FC<PictureFrameProps> = ({
               style={{
                 textAlign: 'center',
                 fontSize: 12,
-                color: '#666',
+                color: '#fff', // chữ trắng trên nền đen
                 lineHeight: 1.4,
                 padding: 6,
               }}
@@ -370,9 +369,9 @@ const PictureFrame: React.FC<PictureFrameProps> = ({
           )}
         </div>
 
-        {/* Chừa khoảng trống để bạn dễ “căn chỉnh” thêm UI bên dưới (reserveSpace) */}
+        {/* Lỗi hiển thị phía dưới, giữ mặc định (đen/trắng tùy nền trang) */}
         {error && (
-          <div style={{ color: '#e11d48', fontSize: 12, marginTop: 8 }}>{error}</div>
+          <div style={{ color: '#000', fontSize: 12, marginTop: 8 }}>{error}</div>
         )}
       </div>
     </div>

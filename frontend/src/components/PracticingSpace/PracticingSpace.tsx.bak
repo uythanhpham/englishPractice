@@ -28,12 +28,12 @@ const PracticingSpace: React.FC = () => {
     try {
       const v = Number(localStorage.getItem('ps_font_px'));
       if (!Number.isNaN(v) && v >= 10 && v <= 36) setFontPx(v);
-    } catch {}
+    } catch { }
   }, []);
   useEffect(() => {
     try {
       localStorage.setItem('ps_font_px', String(fontPx));
-    } catch {}
+    } catch { }
   }, [fontPx]);
   const clamp = (v: number) => Math.min(36, Math.max(10, v));
   const incFont = () => setFontPx((v) => clamp(v + 2));
@@ -612,56 +612,22 @@ const PracticingSpace: React.FC = () => {
           color: #eee;
           border-color: #333;
         }
-
-        /* ===== Topbar: Tabbar + nút tròn dark toggle ===== */
-        .ps-topbar {
-          display: flex; align-items: center; gap: 8px;
-          margin-bottom: 8px;
-        }
-        .ps-topbar .ps-tabbar-wrap {
-          flex: 1 1 auto; min-width: 0;
-          color: #111 !important;                /* Light: chữ Tabbar đen */
-        }
-        body.dark .ps-topbar .ps-tabbar-wrap {
-          color: #fff !important;                 /* Dark: chữ Tabbar trắng */
-        }
-        .dark-toggle-btn {
-          width: 28px; height: 28px;
-          border-radius: 9999px;
-          border: 1px solid #ddd;
-          background: #fff;
-          color: #111;
-          display: inline-flex; align-items: center; justify-content: center;
-          cursor: pointer;
-          box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-          user-select: none;
-          transition: transform .08s ease, background-color .2s ease, border-color .2s ease;
-        }
-        .dark-toggle-btn:active { transform: scale(0.96); }
-        .dark-toggle-btn:hover { filter: brightness(0.97); }
-        body.dark .dark-toggle-btn {
-          background: #222; color: #fff; border-color: #333;
-        }
       `}</style>
 
       <div
         className="wrap practicing-space-root"
         style={{ ['--ps-font-size' as any]: `${fontPx}px` }}
       >
-        {/* Tabbar + nút dark hình tròn */}
-        <div className="ps-topbar">
-          <div className="ps-tabbar-wrap">
-            <Tabbar
-              dark={dark}
-              onToggleDark={handleToggleDark}         
-              colorHex={colorHex}
-              onChangeColorHex={handleChangeColorHex}
-              colorOn={colorOn}
-              onToggleColor={handleToggleColor}
-              onOpenPaste={openPasteModal}
-            />
-          </div>
-        </div>
+        {/* Tabbar tách riêng */}
+        <Tabbar
+          dark={dark}
+          onToggleDark={handleToggleDark}
+          colorHex={colorHex}
+          onChangeColorHex={handleChangeColorHex}
+          colorOn={colorOn}
+          onToggleColor={handleToggleColor}
+          onOpenPaste={openPasteModal}
+        />
 
         {/* Bộ điều khiển cỡ chữ */}
         <div className="ps-font-controls">

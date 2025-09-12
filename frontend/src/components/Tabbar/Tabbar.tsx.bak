@@ -46,7 +46,6 @@ const Tabbar: React.FC<TabbarProps> = ({
               backdropFilter: 'saturate(180%) blur(6px)',
               WebkitBackdropFilter: 'saturate(180%) blur(6px)',
               borderBottom: '1px solid var(--toolbar-border, #e5e7eb)',
-              color: dark ? '#fff' : '#111',
             }
           : undefined
       }
@@ -78,29 +77,6 @@ const Tabbar: React.FC<TabbarProps> = ({
         onClick={onOpenPaste}
       >
         📋 Paste
-      </button>
-      <button
-        type="button"
-        onClick={onToggleDark}
-        aria-pressed={dark}
-        title={dark ? 'Tắt dark mode' : 'Bật dark mode'}
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: 9999,
-          border: `1px solid ${dark ? '#333' : '#ddd'}`,
-          background: dark ? '#222' : '#fff',
-          color: dark ? '#fff' : '#111',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-          userSelect: 'none',
-          marginLeft: 8,
-        }}
-      >
-        {dark ? '☀️' : '🌙'}
       </button>
     </div>
   );
