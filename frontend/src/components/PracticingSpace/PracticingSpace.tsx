@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import './PracticingSpace.css';
 import InputModal from '../InputModal/InputModal';
 import Tabbar from '../Tabbar/Tabbar';
-import PictureFrame from '../PictureFrame/PictureFrame';
+import MirroringSpace from '../MirroringSpace/MirroringSpace';
 
 const INITIAL_TEXT = `Ví dụ: Hello [world] and [friends]!
 A link or [placeholder] appears here.] Tiếp tục...`;
@@ -13,12 +13,18 @@ A link or [placeholder] appears here.] Tiếp tục...`;
 type InputEvt = InputEvent & { isComposing?: boolean; inputType?: string };
 type PasteEvt = ClipboardEvent & { clipboardData: DataTransfer | null };
 
+type Token = {
+  word: string;
+  start: number; // inclusive
+  end: number;   // exclusive
+};
+
 const PracticingSpace: React.FC = () => {
   const edRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);           // container để đo chiều rộng
-  const [pfWidthPx, setPfWidthPx] = useState(360);       // width thực tế cho PictureFrame (~1/3)
+  const [msWidthPx, setMsWidthPx] = useState(360);       // width cho MirroringSpace (~1/3)
 
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true);
   // Toggle: nhấn Space để nhảy tới ']' tiếp theo (mặc định bật để giữ hành vi cũ)
   const [spaceJump, setSpaceJump] = useState<boolean>(true);
 
@@ -31,12 +37,12 @@ const PracticingSpace: React.FC = () => {
     try {
       const v = Number(localStorage.getItem('ps_font_px'));
       if (!Number.isNaN(v) && v >= 10 && v <= 36) setFontPx(v);
-    } catch {}
+    } catch { }
   }, []);
   useEffect(() => {
     try {
       localStorage.setItem('ps_font_px', String(fontPx));
-    } catch {}
+    } catch { }
   }, [fontPx]);
   const clamp = (v: number) => Math.min(36, Math.max(10, v));
   const incFont = () => setFontPx((v) => clamp(v + 2));
@@ -48,12 +54,12 @@ const PracticingSpace: React.FC = () => {
     try {
       const v = localStorage.getItem('ps_space_jump_on');
       if (v === '0') setSpaceJump(false);
-    } catch {}
+    } catch { }
   }, []);
   useEffect(() => {
     try {
       localStorage.setItem('ps_space_jump_on', spaceJump ? '1' : '0');
-    } catch {}
+    } catch { }
   }, [spaceJump]);
 
   // Modal state
@@ -64,23 +70,101 @@ const PracticingSpace: React.FC = () => {
   // (tuỳ chọn) quản lý percent ở parent để đồng bộ với modal
   const [percent, setPercent] = useState<number | undefined>(10);
 
+  // Ghi nhận số lượng "slot từ" ban đầu (bất biến nếu bạn không thay đổi whitespace)
+  const initialWordCountRef = useRef<number>(0);
+
   // Dark Mode
   useEffect(() => {
     document.body.classList.toggle('dark', dark);
     return () => document.body.classList.remove('dark');
   }, [dark]);
 
-  // ====== TÍNH WIDTH ~ 1/3 CHO PICTUREFRAME ======
+  // ====== TÍNH WIDTH ~ 1/3 CHO MIRRORINGSPACE ======
   useEffect(() => {
     const recalc = () => {
       const w = rowRef.current?.clientWidth ?? window.innerWidth;
       const next = Math.round(w * 0.3333);
-      setPfWidthPx(Math.max(280, next)); // tối thiểu 280px cho dễ dùng
+      setMsWidthPx(Math.max(280, next)); // tối thiểu 280px cho dễ dùng
     };
     recalc();
     window.addEventListener('resize', recalc);
     return () => window.removeEventListener('resize', recalc);
   }, []);
+
+  // ====== Tokenize theo định nghĩa "word = chuỗi không chứa whitespace" ======
+  // ====== Tokenize theo định nghĩa "word = chuỗi không chứa whitespace hoặc dấu gạch nối" ======
+  const tokenizeByWhitespace = (text: string): Token[] => {
+    // [^\s-]+ = 1 hoặc nhiều ký tự KHÔNG phải whitespace và KHÔNG phải dấu '-'
+    const re = /[^\s-]+/gu;
+    const out: Token[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const word = m[0];
+      const start = m.index;
+      out.push({ word, start, end: start + word.length });
+    }
+    return out;
+  };
+
+
+  /**
+   * Trả về IMMUTABLE index (1-based) của "word-slot" chứa caret,
+   * dựa trên thứ tự các chuỗi [^\s]+ trong văn bản hiện tại.
+   * - Nếu caret đứng trong/đúng biên 1 word → index của word đó
+   * - Nếu caret ở whitespace → ưu tiên word bên trái; nếu không có thì lấy word bên phải
+   *
+   * Ghi chú: Miễn là bạn KHÔNG thêm/bớt whitespace (chỉ thay nội dung bên trong word),
+   * thứ tự slot không đổi → index này bất biến so với ban đầu.
+   */
+  const caretToImmutableIndex = (text: string, caret: number): number | null => {
+    const words = tokenizeByWhitespace(text); // danh sách slot hiện tại
+    if (!words.length) return null;
+
+    // Ưu tiên inclusive-end: caret == end vẫn xem là thuộc word đó
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      if (caret >= w.start && caret <= w.end) return i + 1;
+    }
+
+    // Caret ở whitespace: chọn word bên trái nếu có
+    let left = -1;
+    for (let i = 0; i < words.length; i++) {
+      if (words[i].end < caret) left = i; else break;
+    }
+    if (left !== -1) return left + 1;
+
+    // Nếu không có bên trái, lấy word bên phải gần nhất
+    for (let i = 0; i < words.length; i++) {
+      if (words[i].start > caret) return i + 1;
+    }
+    return null;
+  };
+
+  // State cho MirroringSpace
+  const [tokens, setTokens] = useState<Token[]>([]);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
+  const recomputeMirror = () => {
+    const el = edRef.current;
+    if (!el) return;
+    const text = el.textContent ?? '';
+    const toks = tokenizeByWhitespace(text);
+    setTokens(toks);
+    const caret = getCaretOffset(el);
+    const idx = caretToImmutableIndex(text, caret);
+    setActiveIndex(idx);
+
+    // Debug: log immutable index
+    if (idx != null) console.log('[PracticingSpace] Immutable word index =', idx);
+
+    // Cảnh báo nếu số slot thay đổi so với ban đầu (trong case bạn lỡ thêm/bớt whitespace)
+    if (initialWordCountRef.current && toks.length !== initialWordCountRef.current) {
+      console.warn(
+        `[PracticingSpace] Word-slot count changed: init=${initialWordCountRef.current}, now=${toks.length}.` +
+        ' Immutable mapping may break if whitespace skeleton changed.'
+      );
+    }
+  };
 
   // ----- Helpers: caret offset <-> selection
   const getCaretOffset = (el: HTMLElement): number => {
@@ -180,6 +264,7 @@ const PracticingSpace: React.FC = () => {
     ensureTrailingBR();
     setCaretOffset(el, el.textContent?.length ?? 0);
     if (colorOn) enforceTypingColor();
+    recomputeMirror();
   };
 
   // Chèn text thuần tại caret
@@ -197,6 +282,7 @@ const PracticingSpace: React.FC = () => {
     sel.removeAllRanges();
     sel.addRange(range);
     ensureTrailingBR();
+    recomputeMirror();
   };
 
   // Đảm bảo hiển thị dòng trống khi kết thúc bằng '\n'
@@ -333,6 +419,7 @@ const PracticingSpace: React.FC = () => {
     if (mutated) {
       ensureTrailingBR();
       if (colorOn) enforceTypingColor();
+      recomputeMirror();
     }
   };
 
@@ -347,6 +434,15 @@ const PracticingSpace: React.FC = () => {
     }
     ensureTrailingBR();
     setCaretOffset(el, el.textContent!.length);
+
+    // Ghi nhận số lượng slot từ ban đầu theo định nghĩa [^\s]+
+    try {
+      const initText = el.textContent ?? '';
+      initialWordCountRef.current = tokenizeByWhitespace(initText).length;
+      console.log('[PracticingSpace] Initial word-slot count =', initialWordCountRef.current);
+    } catch { }
+
+    recomputeMirror();
   }, []);
 
   // listeners
@@ -359,6 +455,7 @@ const PracticingSpace: React.FC = () => {
       if (!sel || sel.rangeCount === 0) return;
       if (!el.contains(sel.anchorNode)) return;
       enforceTypingColor(); // chỉ apply nếu caret collapsed
+      recomputeMirror();
     };
     document.addEventListener('selectionchange', onSelectionChange);
 
@@ -381,6 +478,7 @@ const PracticingSpace: React.FC = () => {
       const type = ie?.inputType || '';
       if (type.startsWith('insert') || type === '') autoCapitalize();
       else ensureTrailingBR();
+      recomputeMirror();
     };
     el.addEventListener('input', onInput);
 
@@ -392,6 +490,7 @@ const PracticingSpace: React.FC = () => {
       text = text.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n');
       insertPlainText(text);
       if (colorOn) enforceTypingColor();
+      recomputeMirror();
     };
     el.addEventListener('paste', onPaste);
 
@@ -420,6 +519,7 @@ const PracticingSpace: React.FC = () => {
       el.focus();
       setCaretOffset(el, idx);
       if (colorOn) enforceTypingColor();
+      recomputeMirror();
       return true;
     }
     return false;
@@ -451,6 +551,7 @@ const PracticingSpace: React.FC = () => {
             el.focus();
             setCaretOffset(el, idx);
             if (colorOn) enforceTypingColor();
+            recomputeMirror();
             return;
           }
           // Không có ']' phía trước => KHÔNG chặn mặc định, để Backspace xoá bình thường
@@ -468,6 +569,7 @@ const PracticingSpace: React.FC = () => {
       e.preventDefault();
       insertPlainText(' ');
       if (colorOn) enforceTypingColor();
+      recomputeMirror();
       return;
     }
 
@@ -495,6 +597,7 @@ const PracticingSpace: React.FC = () => {
       if (!jumped) {
         insertPlainText('\n');
         if (colorOn) enforceTypingColor();
+        recomputeMirror();
       }
       return;
     }
@@ -505,6 +608,7 @@ const PracticingSpace: React.FC = () => {
       e.preventDefault();
       insertPlainText('\n');
       if (colorOn) enforceTypingColor();
+      recomputeMirror();
       return;
     }
 
@@ -518,6 +622,7 @@ const PracticingSpace: React.FC = () => {
           e.preventDefault();
           el.focus();
           setCaretOffset(el, idx);
+          recomputeMirror();
         }
       } else { // Shift+Tab -> về ']' trước đó
         let idx = text.lastIndexOf(']', start - 1);
@@ -525,6 +630,7 @@ const PracticingSpace: React.FC = () => {
           e.preventDefault();
           el.focus();
           setCaretOffset(el, idx);
+          recomputeMirror();
         }
       }
     }
@@ -570,6 +676,7 @@ const PracticingSpace: React.FC = () => {
       setCaretOffset(el, savedCaretRef.current);
       insertPlainText(normalized);
       if (colorOn) enforceTypingColor();
+      recomputeMirror();
     });
   };
 
@@ -602,7 +709,7 @@ const PracticingSpace: React.FC = () => {
           min-width: 56px; text-align: center; padding: 4px 8px; border: 1px dashed #aaa; border-radius: 8px;
         }
 
-        /* ===== Row ngang chứa PictureFrame (trái) + Editor (phải) ===== */
+        /* ===== Row ngang: Editor (trái ~2/3) + MirroringSpace (phải ~1/3) ===== */
         .ps-row {
           display: flex;
           align-items: flex-start;
@@ -610,11 +717,11 @@ const PracticingSpace: React.FC = () => {
           width: 100%;
         }
         .ps-left {
-          flex: 0 0 auto;              /* width set bằng inline style theo pfWidthPx */
+          flex: 1 1 auto;
+          min-width: 0;
         }
         .ps-right {
-          flex: 1 1 auto;
-          min-width: 0;                /* để nội dung xuống dòng đúng trong flex */
+          flex: 0 0 auto; /* width set bằng inline style theo msWidthPx */
         }
 
         /* Editor */
@@ -692,7 +799,7 @@ const PracticingSpace: React.FC = () => {
           <div className="ps-tabbar-wrap">
             <Tabbar
               dark={dark}
-              onToggleDark={handleToggleDark}         
+              onToggleDark={handleToggleDark}
               colorHex={colorHex}
               onChangeColorHex={handleChangeColorHex}
               colorOn={colorOn}
@@ -721,26 +828,23 @@ const PracticingSpace: React.FC = () => {
           <button type="button" onClick={resetFont} title="Đưa về mặc định 14px">Reset</button>
         </div>
 
-        {/* ===== HÀNG NGANG: PictureFrame (trái ~1/3) + Editor (phải ~2/3) ===== */}
+        {/* ===== HÀNG NGANG: Editor (trái ~2/3) + MirroringSpace (phải ~1/3) ===== */}
         <div className="ps-row" ref={rowRef}>
-          <div className="ps-left" style={{ width: pfWidthPx }}>
-            <PictureFrame
-              width={pfWidthPx}     // width theo ~1/3 container
-              height={330}
-              onChange={(file, dataUrl) => {
-                console.log('Ảnh đã nhận:', file.name, file.type, file.size);
-              }}
-              onClear={() => console.log('Đã xóa ảnh trong PictureFrame')}
-            />
-          </div>
-
-          <div className="ps-right">
+          <div className="ps-left">
             <div
               id="editor"
               ref={edRef}
               contentEditable
               spellCheck={false}
               onKeyDown={handleKeyDown}
+            />
+          </div>
+
+          <div className="ps-right" style={{ width: msWidthPx }}>
+            <MirroringSpace
+              tokens={tokens}
+              activeIndex={activeIndex ?? null}
+              title="Mirroring Space"
             />
           </div>
         </div>

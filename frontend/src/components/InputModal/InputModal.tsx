@@ -1,3 +1,4 @@
+// E:\3_CODING\Personally\english_practice\frontend\src\components\InputModal\InputModal.tsx
 'use client';
 
 import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
@@ -47,7 +48,7 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
 
       percentValue,
       onPercentChange,
-      percentLabel = 'Tỉ lệ (%)',
+      percentLabel = '%',
       percentMin = 0,
       percentMax = 100,
       percentStep = 1,
@@ -105,6 +106,19 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
       try {
         setSendStatus('sending');
 
+        // (A) ĐẨY TRƯỚC LÊN MIRRORING SPACE (preview)
+        try {
+          const mod: any = await import('../../state/mirroring');
+          if (mod?.setPreviewText) {
+            mod.setPreviewText(value);
+          } else if (mod?.default?.setPreviewText) {
+            mod.default.setPreviewText(value);
+          }
+        } catch (e) {
+          // Không có store thì bỏ qua, vẫn gửi BE bình thường
+          console.warn('Mirroring store not found, skip preview.', e);
+        }
+
         const pctNumRaw =
           internalPercent === '' ? 0 : Number.isNaN(Number(internalPercent)) ? 0 : Number(internalPercent);
         const pctNum = clamp(pctNumRaw, percentMin ?? 0, percentMax ?? 100);
@@ -129,14 +143,22 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
 
         setSendStatus('success');
 
+        // (B) Phát kết quả đã chỉnh sửa lên PracticingSpace như bình thường
         if (onReceiveConverted && data?.converted) {
           onReceiveConverted(data.converted);
         }
+
+        // (C) GIỮ PREVIEW để người dùng đối chiếu y nguyên với bản gốc
+        // → Không gọi clearPreview nữa.
 
         setTimeout(() => setSendStatus('idle'), 3000);
       } catch (err) {
         console.error(err);
         setSendStatus('error');
+
+        // (D) Lỗi: vẫn GIỮ PREVIEW để người dùng đối chiếu
+        // → Không gọi clearPreview.
+
         setTimeout(() => setSendStatus('idle'), 3000);
       }
     };

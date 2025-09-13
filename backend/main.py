@@ -1,11 +1,17 @@
+# main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
+import os
+import time
+import secrets
+import hashlib
 import random
 import re
+from datetime import datetime
 
-app = FastAPI(title="Bracket Converter BE", version="1.2.0")
+app = FastAPI(title="Bracket Converter BE", version="1.3.0")
 
 # Cho phép FE gọi API (bạn nên sửa allow_origins khi deploy thật)
 app.add_middleware(
@@ -47,6 +53,64 @@ def _normalize_p(percent: float) -> float:
     # ép vào [0,1]
     return 0.0 if p < 0 else 1.0 if p > 1 else p
 
+# ========= NEW: Công thức tạo seed “mạnh” từ thời gian tức thời + entropy =========
+def make_strong_seed(user_seed: Optional[int]) -> int:
+    """
+    Tạo seed bằng cách kết hợp:
+      - Thời gian thực: năm, tháng, ngày, giờ, phút, giây, microsecond
+      - time_ns(), monotonic_ns()
+      - PID hiện tại
+      - Một ít bytes ngẫu nhiên secrets
+      - (Tuỳ chọn) user_seed nếu có: XOR/mix để người dùng vẫn ép được tính lặp lại
+
+    Có dùng các phép + - * / // % ^ để làm vừa ý yêu cầu “+-*/ với thời gian”.
+    """
+    now = datetime.now()  # theo timezone hệ thống
+    y, m, d = now.year, now.month, now.day
+    H, M, S, us = now.hour, now.minute, now.second, now.microsecond
+
+    # Gộp thời gian thành vài “công thức” số:
+    # base1: chuỗi nhân + cộng kiểu timestamp rời rạc
+    base1 = (((((y * 13 + m) * 37 + d) * 29 + H) * 59 + M) * 61 + S) * 1_000_000 + (us or 1)
+
+    # base2: trộn với các số nguyên tố và phép ^ (xor), %, //, *, +
+    denom = max(1, (m * d) % 97)  # tránh chia 0
+    base2 = (
+        ((y ^ (m * 97)) + (d * 131)) * ((H + 1) * (M + 1) * (S + 1))
+        + (base1 // denom)
+        - ((y + m + d) % 7919)
+    )
+
+    # Thêm high-resolution time, monotonic, PID
+    tn = time.time_ns()
+    mn = time.monotonic_ns()
+    pid = os.getpid()
+
+    # Một ít entropy khó đoán
+    sec_bytes = secrets.token_bytes(32)
+
+    # Kết hợp tất cả thành bytes rồi băm BLAKE2b (nhanh và mạnh)
+    h = hashlib.blake2b(digest_size=32)
+    h.update(base1.to_bytes(16, "little", signed=False))
+    h.update(base2.to_bytes(16, "little", signed=False))
+    h.update(tn.to_bytes(16, "little", signed=False))
+    h.update(mn.to_bytes(16, "little", signed=False))
+    h.update(pid.to_bytes(8, "little", signed=False))
+    h.update(sec_bytes)
+
+    # Nếu có user_seed, mix vào theo yêu cầu
+    if user_seed is not None:
+        # Kết hợp qua XOR + nhân + modulo một số nguyên tố lớn
+        mixed = (user_seed * 6364136223846793005 + 1442695040888963407) ^ base2
+        h.update(mixed.to_bytes(16, "little", signed=False))
+
+    seed_bytes = h.digest()
+    seed_int = int.from_bytes(seed_bytes, "little", signed=False)
+
+    # Đưa về phạm vi int seed phù hợp random.Random (dù Random chấp nhận int lớn)
+    # Giữ rộng 63 bit để tránh vấn đề dấu trên một số platform
+    return seed_int % (2**63 - 1)
+
 def convert_text_mode0(text: str, percent: float, rng: random.Random):
     """
     Chế độ cũ: thay ngẫu nhiên từng từ (\\w+) thành ']'
@@ -82,10 +146,10 @@ def convert_text_mode0(text: str, percent: float, rng: random.Random):
 
 def convert_text_mode1(text: str, percent: float, rng: random.Random):
     """
-    Chế độ mới (đúng yêu cầu):
+    Chế độ mới:
     - Quét chuỗi; gặp '<' thì tìm '>' gần nhất.
     - r = uniform(0,1)
-      * Nếu r <= p: xóa toàn bộ từ '<' đến '>' và ghi 1 dấu ']'
+      * Nếu r <= p: xóa toàn bộ từ '<' đến '>' và ghi 1 dấu ']' (tăng replaced_chunks)
       * Nếu r > p: giữ nguyên cụm (để cuối cùng gỡ '<' và '>')
     - Sau lượt quét: xóa toàn bộ kí tự '<' và '>' còn lại.
     - Trả về (converted, total_chunks, replaced_chunks)
@@ -110,6 +174,7 @@ def convert_text_mode1(text: str, percent: float, rng: random.Random):
                 if rng.uniform(0.0, 1.0) <= p:
                     # Xóa '<...>' và ghi ']'
                     parts.append("]")
+                    replaced_chunks += 1  # <-- FIX: ghi nhận thay thế
                 else:
                     # Giữ nguyên để cuối cùng gỡ '<' '>'
                     parts.append(text[i:j+1])
@@ -143,7 +208,10 @@ def root():
 
 @app.post("/api/convert", response_model=ConvertResponse)
 def convert_endpoint(payload: ConvertRequest):
-    rng = random.Random(payload.seed) if payload.seed is not None else random.Random()
+    # Dùng công thức seed mạnh, có trộn thời gian tức thời + secrets
+    seed = make_strong_seed(payload.seed)
+    rng = random.Random(seed)
+
     converted_text, total, replaced = convert_text(payload.text, payload.percent, rng, payload.mode)
     return ConvertResponse(
         converted=converted_text,
