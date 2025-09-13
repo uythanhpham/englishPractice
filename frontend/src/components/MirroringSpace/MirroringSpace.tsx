@@ -17,22 +17,23 @@ const ACTIVE_BG = "var(--ms-active-bg, #fde68a)";
 const containerBaseStyle: React.CSSProperties = {
     display: "flex",
     flexDirection: "column",
-    border: "1px solid var(--border, #e5e7eb)",
+    border: "1px solid #333",        // viền tối
     borderRadius: 12,
-    background: "var(--card, #fff)",
-    color: "var(--text, #111827)",
+    background: "#000",              // nền đen
+    color: "#fff",                   // chữ trắng
     minHeight: 120,
-    position: "relative", // cần để đặt overlay tuyệt đối
-    overflow: "hidden",   // tránh overlay tràn viền
+    position: "relative",
+    overflow: "hidden",
 };
 
 const headerStyle: React.CSSProperties = {
     padding: "8px 12px",
-    borderBottom: "1px solid var(--border, #e5e7eb)",
+    borderBottom: "1px solid #333",  // viền header tối
     fontSize: 14,
     fontWeight: 600,
     opacity: 0.9,
     zIndex: 1,
+    color: "#fff",                   // chữ trắng
 };
 
 const scrollerStyle: React.CSSProperties = {
@@ -42,16 +43,23 @@ const scrollerStyle: React.CSSProperties = {
     lineHeight: 1.9,
     whiteSpace: "pre-wrap",
     wordWrap: "break-word",
-    // filter blur sẽ gán động ở dưới tuỳ theo overlayVisible
+    color: "#fff",                   // chữ trắng
     transition: "filter 0ms ease, opacity 0ms ease",
 };
 
-const wordStyle: React.CSSProperties = { display: "inline", padding: "0 3px", borderRadius: 6 };
+const wordStyle: React.CSSProperties = {
+    display: "inline",
+    padding: "0 3px",
+    borderRadius: 6,
+    color: "#fff",                   // chữ trắng
+};
+
 const activeWordStyle: React.CSSProperties = {
     ...wordStyle,
-    background: ACTIVE_BG,
-    boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)",
+    background: "#444",               // màu nền active tối hơn
+    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.3)",
 };
+
 
 // Overlay che toàn bộ vùng nội dung (không che tiêu đề)
 const overlayStyleBase: React.CSSProperties = {
@@ -197,20 +205,30 @@ export default function MirroringSpace({
     }, []);
 
     // Lắng nghe phím Esc (keydown/keyup)
+    // Lắng nghe phím Esc hoặc Enter
     useEffect(() => {
         let escHeld = false;
+        let enterHeld = false;
 
         const onKeyDown = (e: KeyboardEvent) => {
-            // xử lý cả "Escape" và "Esc" (trình duyệt cũ)
             if ((e.key === "Escape" || e.key === "Esc") && !escHeld) {
                 escHeld = true;
-                setOverlayVisible(false); // đang giữ -> bỏ kính mờ
+                setOverlayVisible(false);
+            }
+            if (e.key === "Enter" && !enterHeld) {
+                enterHeld = true;
+                setOverlayVisible(false);
             }
         };
+
         const onKeyUp = (e: KeyboardEvent) => {
             if (e.key === "Escape" || e.key === "Esc") {
                 escHeld = false;
-                setOverlayVisible(true); // thả -> hiện kính mờ
+                setOverlayVisible(true);
+            }
+            if (e.key === "Enter") {
+                enterHeld = false;
+                setOverlayVisible(true);
             }
         };
 
@@ -221,6 +239,7 @@ export default function MirroringSpace({
             window.removeEventListener("keyup", onKeyUp);
         };
     }, []);
+
 
     // Khi overlay bật, blur nội dung; khi tắt Esc, bỏ blur cho rõ chữ
     const contentFilter = overlayVisible ? "blur(6px)" : "none";

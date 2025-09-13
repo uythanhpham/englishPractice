@@ -589,18 +589,13 @@ const PracticingSpace: React.FC = () => {
     }
 
     // Enter — NHẢY tới ']' kế tiếp (giống Tab/Space) nếu không có modifier.
-    // Fallback: nếu KHÔNG tìm thấy ']' -> chèn newline.
+    // Enter — KHÔNG làm gì cả
     if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
       if (isComposing) return;
-      e.preventDefault();
-      const jumped = jumpToNextBracket(el);
-      if (!jumped) {
-        insertPlainText('\n');
-        if (colorOn) enforceTypingColor();
-        recomputeMirror();
-      }
-      return;
+      e.preventDefault(); // chặn hành vi mặc định (xuống dòng)
+      return;             // không xử lý thêm
     }
+
 
     // Shift+Enter hoặc Ctrl/Cmd+Enter => chèn newline
     if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.metaKey)) {
