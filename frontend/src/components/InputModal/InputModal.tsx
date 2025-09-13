@@ -23,6 +23,12 @@ export interface InputModalProps {
   percentStep?: number;
 
   onReceiveConverted?: (text: string) => void;
+
+  /** (Tuỳ chọn) Endpoint BE — mặc định như cũ */
+  convertApiUrl?: string;
+
+  /** (Tuỳ chọn) mode khởi tạo, mặc định 0 */
+  initialMode?: 0 | 1;
 }
 
 const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
@@ -47,6 +53,9 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
       percentStep = 1,
 
       onReceiveConverted,
+
+      convertApiUrl = 'http://localhost:8000/api/convert',
+      initialMode = 0,
     },
     ref
   ) => {
@@ -55,6 +64,9 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
 
     const [internalPercent, setInternalPercent] = useState<string>('');
     const [sendStatus, setSendStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+
+    // === NEW: state cho mode (0/1) ===
+    const [mode, setMode] = useState<0 | 1>(initialMode);
 
     useImperativeHandle(ref, () => localTARef.current as HTMLTextAreaElement);
 
@@ -68,13 +80,16 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
     useEffect(() => {
       if (open) {
         setInternalPercent(
-          percentValue !== undefined && !Number.isNaN(percentValue)
-            ? String(percentValue)
-            : ''
+          percentValue !== undefined && !Number.isNaN(percentValue) ? String(percentValue) : ''
         );
         setSendStatus('idle');
+
+        // Khi mở modal, default mode = initialMode (mặc định 0)
+        setMode(initialMode ?? 0);
       }
-    }, [open, percentValue]);
+    }, [open, percentValue, initialMode]);
+
+    const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
     const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -90,15 +105,20 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
       try {
         setSendStatus('sending');
 
-        const res = await fetch('http://localhost:8000/api/convert', {
+        const pctNumRaw =
+          internalPercent === '' ? 0 : Number.isNaN(Number(internalPercent)) ? 0 : Number(internalPercent);
+        const pctNum = clamp(pctNumRaw, percentMin ?? 0, percentMax ?? 100);
+
+        const res = await fetch(convertApiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             text: value,
-            percent: internalPercent === '' ? 0 : Number(internalPercent),
+            percent: pctNum,
             seed: Date.now(),
+            mode, // === NEW: gửi mode lên BE ===
           }),
         });
 
@@ -166,12 +186,37 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
               <span className="percent-suffix">%</span>
             </div>
 
+            {/* NEW: hàng chọn Mode 0/1 */}
+            <div
+              className="mode-row"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}
+            >
+              <label style={{ minWidth: 80 }}>Mode</label>
+              <button
+                type="button"
+                className="toggle-btn btn-small"
+                onClick={() => setMode((m) => (m === 0 ? 1 : 0))}
+                title="Chuyển giữa mode 0 và 1"
+              >
+                Mode: <b>{mode}</b>
+              </button>
+              <div style={{ fontSize: 12, color: '#666' }}>
+                {mode === 0
+                  ? 'Thay ngẫu nhiên theo từ (\\w+)'
+                  : 'Thay theo cụm <...> rồi gỡ dấu < >'}
+              </div>
+            </div>
+
             <textarea
               ref={localTARef}
               value={value}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={placeholder}
+              placeholder={
+                mode === 1
+                  ? 'Nhập chuỗi dạng "<Tóm lại>, <mặc dù> <...>" để xử lý theo cụm'
+                  : placeholder
+              }
             />
           </div>
 

@@ -19,6 +19,9 @@ const PracticingSpace: React.FC = () => {
   const [pfWidthPx, setPfWidthPx] = useState(360);       // width thực tế cho PictureFrame (~1/3)
 
   const [dark, setDark] = useState(false);
+  // Toggle: nhấn Space để nhảy tới ']' tiếp theo (mặc định bật để giữ hành vi cũ)
+  const [spaceJump, setSpaceJump] = useState<boolean>(true);
+
   const [colorHex, setColorHex] = useState('#e11d48');
   const [colorOn, setColorOn] = useState(false);
 
@@ -39,6 +42,19 @@ const PracticingSpace: React.FC = () => {
   const incFont = () => setFontPx((v) => clamp(v + 2));
   const decFont = () => setFontPx((v) => clamp(v - 2));
   const resetFont = () => setFontPx(14);
+
+  // load/persist trạng thái spaceJump
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('ps_space_jump_on');
+      if (v === '0') setSpaceJump(false);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem('ps_space_jump_on', spaceJump ? '1' : '0');
+    } catch {}
+  }, [spaceJump]);
 
   // Modal state
   const [showPaste, setShowPaste] = useState(false);
@@ -411,7 +427,7 @@ const PracticingSpace: React.FC = () => {
 
   // Keydown:
   // - Ctrl+Space = chèn space
-  // - Space/Tab/Enter -> tới ']' kế tiếp
+  // - Space/Tab/Enter -> tới ']' kế tiếp (nếu spaceJump = true; nếu tắt => Space chèn ký tự ' ')
   // - Shift+Tab -> về ']' trước
   // - Shift+Enter hoặc Ctrl/Cmd+Enter -> chèn xuống dòng
   // - Backspace: nếu ký tự TRƯỚC caret là ' ' hoặc ']' => NHẢY về ']' trước đó (hành vi Shift+Tab). Nếu không có ']' trước đó thì để mặc định xoá.
@@ -455,14 +471,18 @@ const PracticingSpace: React.FC = () => {
       return;
     }
 
-    // Space => nhảy tới dấu ']' tiếp theo (giống Tab)
+    // Space:
+    // - Nếu spaceJump = true: nhảy tới ']' tiếp theo (giống Tab)
+    // - Nếu spaceJump = false: để mặc định chèn ký tự space bình thường
     if (
       (e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space') &&
       !e.ctrlKey && !e.metaKey && !e.altKey
     ) {
       if (isComposing) return;
-      e.preventDefault();
-      jumpToNextBracket(el);
+      if (spaceJump) {
+        e.preventDefault();
+        jumpToNextBracket(el);
+      }
       return;
     }
 
@@ -613,7 +633,7 @@ const PracticingSpace: React.FC = () => {
           border-color: #333;
         }
 
-        /* ===== Topbar: Tabbar + nút tròn dark toggle ===== */
+        /* ===== Topbar: Tabbar + nút tròn ===== */
         .ps-topbar {
           display: flex; align-items: center; gap: 8px;
           margin-bottom: 8px;
@@ -642,13 +662,32 @@ const PracticingSpace: React.FC = () => {
         body.dark .dark-toggle-btn {
           background: #222; color: #fff; border-color: #333;
         }
+
+        /* Nút tròn bật/tắt Space→] */
+        .space-toggle-btn {
+          width: 28px; height: 28px;
+          border-radius: 9999px;
+          border: 1px solid #ddd;
+          background: #fff;
+          color: #111;
+          display: inline-flex; align-items: center; justify-content: center;
+          cursor: pointer;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+          user-select: none;
+          transition: transform .08s ease, background-color .2s ease, border-color .2s ease;
+          font-size: 12px;
+        }
+        .space-toggle-btn:active { transform: scale(0.96); }
+        .space-toggle-btn:hover { filter: brightness(0.97); }
+        body.dark .space-toggle-btn { background:#222; color:#fff; border-color:#333; }
+        .space-toggle-btn[aria-pressed="true"] { border-color:#2563eb; }
       `}</style>
 
       <div
         className="wrap practicing-space-root"
         style={{ ['--ps-font-size' as any]: `${fontPx}px` }}
       >
-        {/* Tabbar + nút dark hình tròn */}
+        {/* Tabbar + nút tròn */}
         <div className="ps-topbar">
           <div className="ps-tabbar-wrap">
             <Tabbar
@@ -661,6 +700,17 @@ const PracticingSpace: React.FC = () => {
               onOpenPaste={openPasteModal}
             />
           </div>
+
+          {/* Nút tròn bật/tắt chế độ Space→] */}
+          <button
+            type="button"
+            className="space-toggle-btn"
+            title="Bật/tắt: nhấn Space để nhảy tới dấu ']' tiếp theo"
+            aria-pressed={spaceJump}
+            onClick={() => setSpaceJump(v => !v)}
+          >
+            {spaceJump ? '␣→]' : '␣'}
+          </button>
         </div>
 
         {/* Bộ điều khiển cỡ chữ */}
