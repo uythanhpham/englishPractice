@@ -11,7 +11,7 @@ import random
 import re
 from datetime import datetime
 
-app = FastAPI(title="Bracket Converter BE", version="1.3.0")
+app = FastAPI(title="Bracket Converter BE", version="1.7.0")
 
 # Cho phép FE gọi API (bạn nên sửa allow_origins khi deploy thật)
 app.add_middleware(
@@ -27,7 +27,8 @@ class ConvertRequest(BaseModel):
     text: str
     percent: float = Field(..., ge=0, le=100, description="Tỉ lệ hoặc phần trăm (0–1 hoặc 0–100)")
     seed: Optional[int] = Field(None, description="Tùy chọn seed để kết quả lặp lại")
-    mode: int = Field(0, description="0 = thay theo từ (regex \\w+), 1 = thay theo cụm <...>")
+    # BE chỉ hỗ trợ mode=1; trường này được giữ để tương thích nhưng sẽ bị bỏ qua nếu khác 1
+    mode: int = Field(1, description="(BỎ QUA) BE chỉ hỗ trợ mode=1: xử lý cụm <...> với biến A và NBSP")
 
 # ======== Output trả về FE ========
 class ConvertResponse(BaseModel):
@@ -146,13 +147,15 @@ def convert_text_mode0(text: str, percent: float, rng: random.Random):
 
 def convert_text_mode1(text: str, percent: float, rng: random.Random):
     """
-    Chế độ mới:
-    - Quét chuỗi; gặp '<' thì tìm '>' gần nhất.
-    - r = uniform(0,1)
-      * Nếu r <= p: xóa toàn bộ từ '<' đến '>' và ghi 1 dấu ']' (tăng replaced_chunks)
-      * Nếu r > p: giữ nguyên cụm (để cuối cùng gỡ '<' và '>')
-    - Sau lượt quét: xóa toàn bộ kí tự '<' và '>' còn lại.
-    - Trả về (converted, total_chunks, replaced_chunks)
+    Chỉ mode 1, dùng biến A (0/1):
+      - A khởi tạo = 1.
+      - Gặp ' ' (ASCII space): nếu A=1 -> thay bằng NBSP (\u00A0), nếu A=0 -> giữ nguyên.
+      - Gặp '<': đặt A=0, tìm '>' gần nhất:
+          * Nếu r <= p: xóa toàn bộ từ '<' đến '>' (bao gồm cả dấu), sau đó A=1 và chèn dấu ']' ngay vị trí đó.
+          * Nếu r > p: giữ nguyên đoạn '<...>', qua '>' thì A=1.
+      - Gặp '>': đặt A=1.
+    Loop2: Sau khi quét xong, xóa mọi dấu '<' và '>' còn sót lại trong chuỗi.
+    Trả về (converted, total_chunks, replaced_chunks) với total_chunks là số cụm '<...>' gặp, replaced_chunks là số cụm bị xóa.
     """
     if not text:
         return "", 0, 0
@@ -163,30 +166,54 @@ def convert_text_mode1(text: str, percent: float, rng: random.Random):
     total_chunks = 0
     replaced_chunks = 0
     p = _normalize_p(percent)
+    NBSP = "\u00A0"
+    A = 1  # trạng thái ban đầu
 
     while i < n:
         ch = text[i]
         if ch == "<":
+            A = 0
             j = text.find(">", i + 1)
             if j != -1:
-                # Có một cụm <...>
                 total_chunks += 1
-                if rng.uniform(0.0, 1.0) <= p:
-                    # Xóa '<...>' và ghi ']'
+                r = rng.uniform(0.0, 1.0)
+                if r <= p:
+                    # Xóa toàn bộ từ '<' đến '>' (bao gồm cả hai dấu)
+                    A = 1
+                    # Chèn dấu ']' ngay sau khi xoá cụm
                     parts.append("]")
-                    replaced_chunks += 1  # <-- FIX: ghi nhận thay thế
+                    i = j + 1
+                    replaced_chunks += 1
+                    continue
                 else:
-                    # Giữ nguyên để cuối cùng gỡ '<' '>'
+                    # Giữ nguyên cụm '<...>'; qua '>' thì A=1
                     parts.append(text[i:j+1])
-                i = j + 1
-                continue
+                    A = 1
+                    i = j + 1
+                    continue
             # Không tìm thấy '>' => coi '<' như kí tự thường
-        parts.append(ch)
-        i += 1
+            parts.append("<")
+            i += 1
+            continue
+        elif ch == ">":
+            A = 1
+            parts.append(">")
+            i += 1
+            continue
+        elif ch == " ":
+            # Space thường: nếu A=1 => NBSP, A=0 => giữ nguyên
+            parts.append(NBSP if A == 1 else " ")
+            i += 1
+            continue
+        else:
+            parts.append(ch)
+            i += 1
 
-    # Bước cuối: gỡ toàn bộ '<' và '>' còn sót lại
-    out = "".join(parts).replace("<", "").replace(">", "")
-    return out, total_chunks, replaced_chunks
+    # Kết quả sau Loop1
+    out1 = "".join(parts)
+    # ===== Loop2: xóa toàn bộ dấu '<' và '>' còn lại =====
+    out2 = out1.replace("<", "").replace(">", "")
+    return out2, total_chunks, replaced_chunks
 
 def convert_text(text: str, percent: float, rng: random.Random, mode: int):
     if mode == 1:
@@ -198,12 +225,9 @@ def convert_text(text: str, percent: float, rng: random.Random, mode: int):
 def root():
     return {
         "status": "ok",
-        "message": "Use POST /api/convert with JSON {text, percent, seed?, mode?}",
-        "percent_note": "percent chấp nhận 0..1 (tỉ lệ) hoặc 0..100 (phần trăm)",
-        "modes": {
-            "0": "Random thay từ (regex \\w+) thành ']'",
-            "1": "Quét cụm <...>; nếu r<=p thì thay cụm bằng ']', sau đó gỡ tất cả '<' và '>' còn lại",
-        },
+        "message": "Use POST /api/convert with JSON {text, percent, seed?, mode?}. BE chỉ hỗ trợ mode=1.",
+        "percent_note": "percent chấp nhận 0..1 (tỉ lệ) hoặc 1..100 (phần trăm)",
+        "mode": "1 = Dùng biến A (0/1). Space ASCII: A=1 -> NBSP, A=0 -> giữ nguyên. Gặp '<' -> A=0; gặp '>' -> A=1. Nếu r<=p: xóa toàn bộ '<...>' (kể cả dấu), đặt A=1 và chèn ']'. Cuối cùng xóa hết '<' và '>' còn sót.",
     }
 
 @app.post("/api/convert", response_model=ConvertResponse)
@@ -212,13 +236,14 @@ def convert_endpoint(payload: ConvertRequest):
     seed = make_strong_seed(payload.seed)
     rng = random.Random(seed)
 
-    converted_text, total, replaced = convert_text(payload.text, payload.percent, rng, payload.mode)
+    # BE ép dùng mode=1
+    converted_text, total, replaced = convert_text_mode1(payload.text, payload.percent, rng)
     return ConvertResponse(
         converted=converted_text,
         percent=payload.percent,
-        words_total=total,        # mode=0: số từ; mode=1: số cụm <...>
-        words_replaced=replaced,  # mode=0: số từ bị thay; mode=1: số cụm bị thay
-        mode=payload.mode,
+        words_total=total,        # số cụm <...> gặp
+        words_replaced=replaced,  # số cụm bị xóa
+        mode=1,
     )
 
 # === Chạy trực tiếp bằng: python main.py ===

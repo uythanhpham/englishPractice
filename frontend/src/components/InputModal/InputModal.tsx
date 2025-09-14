@@ -68,6 +68,7 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
 
     // === NEW: state cho mode (0/1) ===
     const [mode, setMode] = useState<0 | 1>(initialMode);
+    const prevOpenRef = useRef<boolean>(false); // Track previous open state
 
     useImperativeHandle(ref, () => localTARef.current as HTMLTextAreaElement);
 
@@ -84,11 +85,8 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
           percentValue !== undefined && !Number.isNaN(percentValue) ? String(percentValue) : ''
         );
         setSendStatus('idle');
-
-        // Khi mở modal, default mode = initialMode (mặc định 0)
-        setMode(initialMode ?? 0);
       }
-    }, [open, percentValue, initialMode]);
+    }, [open, percentValue]); // Synchronize percentValue when modal opens or changes
 
     const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
@@ -110,9 +108,12 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
         try {
           const mod: any = await import('../../state/mirroring');
           if (mod?.setPreviewText) {
-            mod.setPreviewText(value);
+            // Tiền xử lý văn bản để đảm bảo `<...>` được giữ nguyên
+            const processedValue = value.replace(/<[^>]*>/g, (match) => match.replace(/\s+/g, ' '));
+            mod.setPreviewText(processedValue);
           } else if (mod?.default?.setPreviewText) {
-            mod.default.setPreviewText(value);
+            const processedValue = value.replace(/<[^>]*>/g, (match) => match.replace(/\s+/g, ' '));
+            mod.default.setPreviewText(processedValue);
           }
         } catch (e) {
           // Không có store thì bỏ qua, vẫn gửi BE bình thường

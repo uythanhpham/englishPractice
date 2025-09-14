@@ -39,8 +39,8 @@ export const subscribe = (cb: (s: MirroringState) => void) => {
 };
 
 const tokenize = (text: string): Token[] => {
-  // Unicode letters + số để hỗ trợ tiếng Việt có dấu
-  const re = /\p{L}+|\d+/gu;
+  // Regex để nhận diện các chuỗi nằm giữa cặp dấu '<' và '>' như một từ duy nhất
+  const re = /<[^>]*>|\p{L}+|\d+/gu;
   const out: Token[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {

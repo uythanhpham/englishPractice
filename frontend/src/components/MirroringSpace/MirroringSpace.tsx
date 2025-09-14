@@ -28,12 +28,15 @@ const containerBaseStyle: React.CSSProperties = {
 
 const headerStyle: React.CSSProperties = {
     padding: "8px 12px",
-    borderBottom: "1px solid #333",  // viền header tối
+    borderBottom: "1px solid #333", // viền header tối
     fontSize: 14,
     fontWeight: 600,
     opacity: 0.9,
     zIndex: 1,
-    color: "#fff",                   // chữ trắng
+    color: "#fff", // chữ trắng
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
 };
 
 const scrollerStyle: React.CSSProperties = {
@@ -197,6 +200,7 @@ export default function MirroringSpace({
     // ====== Overlay logic: mặc định có kính mờ; nhấn giữ Esc để ẩn ======
     const [overlayVisible, setOverlayVisible] = useState<boolean>(true);
     const [headerHeight, setHeaderHeight] = useState<number>(40);
+    const [escRevealEnabled, setEscRevealEnabled] = useState<boolean>(true); // Toggle Esc functionality
 
     // cập nhật top của overlay theo chiều cao header thực tế
     useEffect(() => {
@@ -207,9 +211,13 @@ export default function MirroringSpace({
     // Lắng nghe phím Esc (keydown/keyup)
     // Lắng nghe phím Esc hoặc Enter
     useEffect(() => {
+        if (!escRevealEnabled) {
+            setOverlayVisible(false);
+            return;
+        }
+        setOverlayVisible(true);
         let escHeld = false;
         let enterHeld = false;
-
         const onKeyDown = (e: KeyboardEvent) => {
             if ((e.key === "Escape" || e.key === "Esc") && !escHeld) {
                 escHeld = true;
@@ -220,7 +228,6 @@ export default function MirroringSpace({
                 setOverlayVisible(false);
             }
         };
-
         const onKeyUp = (e: KeyboardEvent) => {
             if (e.key === "Escape" || e.key === "Esc") {
                 escHeld = false;
@@ -231,14 +238,13 @@ export default function MirroringSpace({
                 setOverlayVisible(true);
             }
         };
-
         window.addEventListener("keydown", onKeyDown);
         window.addEventListener("keyup", onKeyUp);
         return () => {
             window.removeEventListener("keydown", onKeyDown);
             window.removeEventListener("keyup", onKeyUp);
         };
-    }, []);
+    }, [escRevealEnabled]);
 
 
     // Khi overlay bật, blur nội dung; khi tắt Esc, bỏ blur cho rõ chữ
@@ -252,7 +258,28 @@ export default function MirroringSpace({
         >
             {title ? (
                 <div ref={headerRef} style={headerStyle}>
-                    {title}
+                    <span>{title}</span>
+                    <button
+                        type="button"
+                        onClick={() => setEscRevealEnabled((v) => !v)}
+                        title={
+                            escRevealEnabled
+                                ? "Đang BẬT: Nhấn giữ Esc (hoặc Enter) để tạm ẩn lớp sương mờ. Bấm để tắt tính năng này."
+                                : "Đang TẮT: Lớp sương mờ luôn bị vô hiệu. Bấm để bật lại tính năng nhấn Esc."
+                        }
+                        style={{
+                            fontSize: 12,
+                            padding: "4px 8px",
+                            borderRadius: 8,
+                            border: "1px solid #444",
+                            background: escRevealEnabled ? "#1f2937" : "#374151",
+                            color: "#fff",
+                            cursor: "pointer",
+                        }}
+                        aria-pressed={!escRevealEnabled}
+                    >
+                        {escRevealEnabled ? "ESC reveal: ON" : "ESC reveal: OFF"}
+                    </button>
                 </div>
             ) : null}
 
@@ -277,9 +304,12 @@ export default function MirroringSpace({
                     opacity: overlayVisible ? 1 : 0,
                     pointerEvents: overlayVisible ? "auto" : "none",
                 }}
-                // để người dùng biết mẹo: giữ Esc để xem rõ
                 aria-label="Frosted overlay — Hold Esc to reveal text"
-                title="Giữ phím Esc để tạm ẩn lớp kính mờ và xem nội dung"
+                title={
+                    escRevealEnabled
+                        ? "Giữ phím Esc (hoặc Enter) để tạm ẩn lớp kính mờ và xem nội dung"
+                        : "Tính năng nhấn Esc đã tắt — lớp kính mờ đang bị vô hiệu hoá"
+                }
             />
         </section>
     );

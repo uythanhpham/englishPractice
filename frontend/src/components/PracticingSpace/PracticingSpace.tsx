@@ -91,10 +91,14 @@ const PracticingSpace: React.FC = () => {
     return () => window.removeEventListener('resize', recalc);
   }, []);
 
-  // ====== Tokenize theo định nghĩa "word = chuỗi không chứa whitespace" ======
-  // ====== Tokenize theo định nghĩa "word = chuỗi không chứa whitespace hoặc dấu gạch nối" ======
-  const tokenizeByWhitespace = (text: string): Token[] => {
-    // [^\s-]+ = 1 hoặc nhiều ký tự KHÔNG phải whitespace và KHÔNG phải dấu '-'
+  // ====== Tokenize modes ======
+  const NBSP = '\u00A0'; // Non-breaking space
+  // In MODE 1, both NBSP and newline '\n' act as "walls" (vách ngăn)
+  const isWall = (ch: string) => ch === NBSP || ch === '\n';
+
+  const tokenizeMode0 = (text: string): Token[] => {
+    // Mode 0 (mặc định hiện tại):
+    // "word" = chuỗi KHÔNG chứa whitespace hoặc dấu '-'  →  /[^\s-]+/gu
     const re = /[^\s-]+/gu;
     const out: Token[] = [];
     let m: RegExpExecArray | null;
@@ -105,7 +109,35 @@ const PracticingSpace: React.FC = () => {
     }
     return out;
   };
-
+  const tokenizeMode1 = (text: string): Token[] => {
+    /**
+     * MODE 1 — NBSP & '\n' = VÁCH NGĂN.
+     * - Mỗi NBSP (U+00A0) HOẶC newline '\n' làm tăng chỉ số (index) lên 1.
+     * - ToÀN BỘ ký tự giữa HAI vách (NBSP hoặc '\n') (kể cả space thường, tab, dấu câu, v.v.)
+     *   CHUNG MỘT index.
+     * - NBSP và '\n' tự nó KHÔNG thuộc bất kỳ token/index nào.
+     * - Chúng ta tạo token cho *mọi đoạn* giữa các vách, BAO GỒM cả đoạn rỗng ở đầu/cuối
+     *   hoặc giữa hai vách liên tiếp, để thứ tự index ổn định:
+     *     text = "NBSP xin  chào \n  các bạn  NBSP"
+     *       => tokens: ["", " xin  chào ", "  các bạn  ", ""]
+     *       => indices:   1         2             3        4
+     */
+    const out: Token[] = [];
+    const n = text.length;
+    let segStart = 0;
+    for (let i = 0; i < n; i++) {
+      if (isWall(text[i])) {
+        // push đoạn [segStart, i) — CHO PHÉP rỗng để giữ index
+        out.push({ word: text.slice(segStart, i), start: segStart, end: i });
+        segStart = i + 1; // bỏ qua ký tự vách (NBSP hoặc '\n')
+      }
+    }
+    // đoạn cuối cùng sau vách cuối (có thể rỗng)
+    out.push({ word: text.slice(segStart, n), start: segStart, end: n });
+    return out;
+  };
+  const [wordMode, setWordMode] = useState<0 | 1>(1); // Default to Mode 1
+  const tokenize = (text: string): Token[] => (wordMode === 0 ? tokenizeMode0(text) : tokenizeMode1(text)); // Replace tokenizeByWhitespace
 
   /**
    * Trả về IMMUTABLE index (1-based) của "word-slot" chứa caret,
@@ -117,25 +149,23 @@ const PracticingSpace: React.FC = () => {
    * thứ tự slot không đổi → index này bất biến so với ban đầu.
    */
   const caretToImmutableIndex = (text: string, caret: number): number | null => {
-    const words = tokenizeByWhitespace(text); // danh sách slot hiện tại
+    // MODE 1: chỉ số = 1 + số VÁCH (NBSP hoặc '\n') *trước* vị trí caret.
+    // Các vách không nhận index.
+    if (wordMode === 1) {
+      const pos = Math.max(0, Math.min(caret, text.length));
+      let walls = 0;
+      for (let i = 0; i < pos; i++) {
+        if (isWall(text[i])) walls++;
+      }
+      // Luôn có ít nhất một "khoang" (kể cả rỗng) ⇒ index bắt đầu từ 1
+      return walls + 1;
+    }
+    // MODE 0: như cũ — tìm token bao chứa caret (end inclusive để caret ngay trước delimiter vẫn thuộc token trái)
+    const words = tokenize(text);
     if (!words.length) return null;
-
-    // Ưu tiên inclusive-end: caret == end vẫn xem là thuộc word đó
     for (let i = 0; i < words.length; i++) {
       const w = words[i];
       if (caret >= w.start && caret <= w.end) return i + 1;
-    }
-
-    // Caret ở whitespace: chọn word bên trái nếu có
-    let left = -1;
-    for (let i = 0; i < words.length; i++) {
-      if (words[i].end < caret) left = i; else break;
-    }
-    if (left !== -1) return left + 1;
-
-    // Nếu không có bên trái, lấy word bên phải gần nhất
-    for (let i = 0; i < words.length; i++) {
-      if (words[i].start > caret) return i + 1;
     }
     return null;
   };
@@ -148,14 +178,14 @@ const PracticingSpace: React.FC = () => {
     const el = edRef.current;
     if (!el) return;
     const text = el.textContent ?? '';
-    const toks = tokenizeByWhitespace(text);
+    const toks = tokenize(text); // Replace tokenizeByWhitespace with tokenize
     setTokens(toks);
     const caret = getCaretOffset(el);
     const idx = caretToImmutableIndex(text, caret);
     setActiveIndex(idx);
 
     // Debug: log immutable index
-    if (idx != null) console.log('[PracticingSpace] Immutable word index =', idx);
+    if (idx != null) console.log('[PracticingSpace] Immutable word index =', idx, '(mode', wordMode, ')');
 
     // Cảnh báo nếu số slot thay đổi so với ban đầu (trong case bạn lỡ thêm/bớt whitespace)
     if (initialWordCountRef.current && toks.length !== initialWordCountRef.current) {
@@ -438,8 +468,8 @@ const PracticingSpace: React.FC = () => {
     // Ghi nhận số lượng slot từ ban đầu theo định nghĩa [^\s]+
     try {
       const initText = el.textContent ?? '';
-      initialWordCountRef.current = tokenizeByWhitespace(initText).length;
-      console.log('[PracticingSpace] Initial word-slot count =', initialWordCountRef.current);
+      initialWordCountRef.current = tokenize(initText).length; // Replace tokenizeByWhitespace with tokenize
+      console.log('[PracticingSpace] Initial word-slot count =', initialWordCountRef.current, '(mode', wordMode, ')');
     } catch { }
 
     recomputeMirror();
@@ -507,7 +537,7 @@ const PracticingSpace: React.FC = () => {
       el.removeEventListener('compositionstart', onCompStart);
       el.removeEventListener('compositionupdate', onCompUpdate);
     };
-  }, [colorOn, colorHex]);
+  }, [colorOn, colorHex, wordMode]);
 
   // ===== Helper: nhảy tới ']' kế tiếp (return true nếu nhảy được) =====
   const jumpToNextBracket = (el: HTMLElement): boolean => {
@@ -543,9 +573,30 @@ const PracticingSpace: React.FC = () => {
         const pos = getCaretOffset(el);
         const text = el.textContent ?? '';
         const prev = pos > 0 ? text[pos - 1] : '';
-        if (prev === ' ' || prev === ']') {
+
+        // MODE 1: nếu ngay trước caret là NBSP hoặc '\n' (vách ngăn) thì KHÔNG xoá,
+        // thay vào đó hành xử như Shift+Tab (nhảy về ']' trước đó nếu có).
+        if (wordMode === 1 && (prev === NBSP || prev === '\n')) {
+          const idx = text.lastIndexOf(']', pos - 1);
+          e.preventDefault(); // không cho xoá vách
+          if (idx !== -1) {
+            el.focus();
+            setCaretOffset(el, idx);
+            if (colorOn) enforceTypingColor();
+            recomputeMirror();
+          }
+          return; // nếu không có ']' phía trước thì chỉ đơn giản là không làm gì
+        }
+
+        // Phần còn lại:
+        // - Mode 0: ' ' hoặc ']' => nhảy về ']' trước (Shift+Tab).
+        // - Mode 1: CHỈ ']' mới nhảy; ' ' thì để Backspace xoá bình thường.
+        if (
+          (wordMode === 0 && (prev === ' ' || prev === ']')) ||
+          (wordMode === 1 && prev === ']')
+        ) {
           // Hành vi như Shift+Tab: nhảy về dấu ']' trước đó nếu có
-          let idx = text.lastIndexOf(']', pos - 1);
+          const idx = text.lastIndexOf(']', pos - 1);
           if (idx !== -1) {
             e.preventDefault(); // chặn xoá mặc định — chỉ nhảy caret
             el.focus();
@@ -595,7 +646,6 @@ const PracticingSpace: React.FC = () => {
       e.preventDefault(); // chặn hành vi mặc định (xuống dòng)
       return;             // không xử lý thêm
     }
-
 
     // Shift+Enter hoặc Ctrl/Cmd+Enter => chèn newline
     if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.metaKey)) {
@@ -783,6 +833,25 @@ const PracticingSpace: React.FC = () => {
         .space-toggle-btn:hover { filter: brightness(0.97); }
         body.dark .space-toggle-btn { background:#222; color:#fff; border-color:#333; }
         .space-toggle-btn[aria-pressed="true"] { border-color:#2563eb; }
+
+        /* Nút tròn bật/tắt chế độ word */
+        .mode-toggle-btn {
+          width: 28px; height: 28px;
+          border-radius: 9999px;
+          border: 1px solid #ddd;
+          background: #fff;
+          color: #111;
+          display: inline-flex; align-items: center; justify-content: center;
+          cursor: pointer;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+          user-select: none;
+          transition: transform .08s ease, background-color .2s ease, border-color .2s ease;
+          font-size: 12px;
+        }
+        .mode-toggle-btn:active { transform: scale(0.96); }
+        .mode-toggle-btn:hover { filter: brightness(0.97); }
+        body.dark .mode-toggle-btn { background:#222; color:#fff; border-color:#333; }
+        .mode-toggle-btn[aria-pressed="true"] { border-color:#2563eb; }
       `}</style>
 
       <div
@@ -812,6 +881,24 @@ const PracticingSpace: React.FC = () => {
             onClick={() => setSpaceJump(v => !v)}
           >
             {spaceJump ? '␣→]' : '␣'}
+          </button>
+
+          {/* Nút tròn bật/tắt chế độ word */}
+          <button
+            type="button"
+            className="mode-toggle-btn"
+            title={
+              "Đổi định nghĩa 'word'.\n" +
+              "Mode 0: [^\\s-]+.\n" +
+              "Mode 1 (NBSP & \\n = vách ngăn):\n" +
+              "  • NBSP (\\u00A0) hoặc newline (\\n) ngăn cách các cụm; MỌI ký tự khác đều thuộc cụm.\n" +
+              "  • Mỗi vách làm chỉ số tăng +1; tất cả ký tự giữa 2 vách cùng một index.\n" +
+              "  • Ký tự vách không nhận index."
+            }
+            aria-pressed={wordMode === 1}
+            onClick={() => setWordMode((m: 0 | 1) => (m === 0 ? 1 : 0))} // Explicitly type `m` to avoid implicit `any` type
+          >
+            {wordMode === 0 ? 'M0' : 'M1'}
           </button>
         </div>
 
