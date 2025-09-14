@@ -24,6 +24,10 @@ const ConvertedModal: React.FC<ConvertedModalProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState<'idle' | 'ok' | 'err'>('idle');
 
+  // Đếm số cặp <> hiện tại trong nội dung
+  const [pairCount, setPairCount] = useState<number>(0);
+  const refreshPairCount = () => setPairCount(countAnglePairs(contentRef.current?.innerText ?? ''));
+
   // Tránh lặp vô hạn khi tự bọc selection
   const wrappingRef = useRef(false);
 
@@ -44,6 +48,7 @@ const ConvertedModal: React.FC<ConvertedModalProps> = ({
     if (!contentRef.current) return;
     setPlainText(contentRef.current, initialText);
     placeCaretEnd(contentRef.current);
+    refreshPairCount();
   }, [open, initialText]);
 
   // Lắng nghe việc bôi đen (selection) để tự bọc bằng <...>
@@ -84,6 +89,7 @@ const ConvertedModal: React.FC<ConvertedModalProps> = ({
         sel.removeAllRanges();
         sel.addRange(r);
       } finally {
+        refreshPairCount();
         // Trả cờ về false sau microtask
         setTimeout(() => (wrappingRef.current = false), 0);
       }
@@ -98,6 +104,8 @@ const ConvertedModal: React.FC<ConvertedModalProps> = ({
     e.preventDefault();
     const text = e.clipboardData?.getData('text/plain') ?? '';
     insertPlainTextAtCaret(text.replace(/\r\n?/g, '\n'));
+    // defer để DOM cập nhật xong rồi đếm
+    setTimeout(() => refreshPairCount(), 0);
   };
 
   // Đóng modal khi nhấn ESC
@@ -185,6 +193,13 @@ const ConvertedModal: React.FC<ConvertedModalProps> = ({
             <button type="button" onClick={onClose} style={btnStyle()}>
               ✖
             </button>
+            <span
+              title="Số cặp <...> trong nội dung"
+              style={{ fontSize: 12, padding: '4px 8px', border: '1px solid #e5e7eb', borderRadius: 8 }}
+              aria-label="Angle bracket pairs count"
+            >
+              Pairs: <b>{pairCount}</b>
+            </span>
           </div>
         </div>
 
@@ -193,23 +208,12 @@ const ConvertedModal: React.FC<ConvertedModalProps> = ({
           style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}
         >
           <div
-            style={{
-              fontSize: 12,
-              color: '#6b7280',
-              lineHeight: 1.5,
-            }}
-          >
-            Ctrl/Cmd+V để dán văn bản. Sau đó, bất kỳ phần văn bản nào bạn bôi đen sẽ tự động
-            được bọc bằng <code>&lt;</code> ở đầu và <code>&gt;</code> ở cuối. Khi bấm{' '}
-            <b>Copy all</b>, hệ thống sẽ chèn một dấu cách giữa mọi cặp <code>&gt;&lt;</code> dính liền.
-          </div>
-
-          <div
             ref={contentRef}
             className="converted-editor"
             contentEditable
             suppressContentEditableWarning
             onPaste={handlePaste}
+            onInput={refreshPairCount}
             style={{
               minHeight: 260,
               maxHeight: '58vh',
@@ -282,6 +286,14 @@ function insertPlainTextAtCaret(text: string) {
 function ensureBetweenAnglePairs(s: string): string {
   // Thay mọi '><' thành '> <'
   return s.replace(/></g, '> <');
+}
+
+/**
+ * Đếm số cặp <...> trong chuỗi (coi mọi chuỗi có '<' mở và '>' đóng là một cặp).
+ */
+function countAnglePairs(text: string): number {
+  const matches = text.match(/<[^>]*>/g);
+  return matches ? matches.length : 0;
 }
 
 export default ConvertedModal;

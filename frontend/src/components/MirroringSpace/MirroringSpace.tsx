@@ -29,7 +29,8 @@ const containerBaseStyle: React.CSSProperties = {
     borderRadius: 12,
     background: "#000",              // nền đen
     color: "#fff",                   // chữ trắng
-    minHeight: 120,
+    // trước đây: minHeight: 120,
+    minHeight: "clamp(120px, 18vh, 280px)",
     position: "relative",
     overflow: "hidden",
 };
@@ -50,7 +51,8 @@ const headerStyle: React.CSSProperties = {
 const scrollerStyle: React.CSSProperties = {
     padding: 12,
     overflow: "auto",
-    maxHeight: 360,
+    // trước đây: maxHeight: 360,
+    maxHeight: "var(--ms-max-h, clamp(260px, 60vh, 80vh))",
     lineHeight: 1.9,
     whiteSpace: "pre-wrap",
     wordWrap: "break-word",

@@ -1,6 +1,6 @@
 /* styles.css */
 /* ========= Root & Base ========= */
-:root { 
+:root {
   --caret: #ff2d55;
 }
 
@@ -13,14 +13,14 @@ body {
   transition: background 0.3s, color 0.3s;
 }
 
-.wrap { 
-  max-width: 840px; 
-  margin: 0 auto; 
+.wrap {
+  max-width: 840px;
+  margin: 0 auto;
 }
 
-h1 { 
-  font-size: 18px; 
-  margin: 0 0 12px; 
+h1 {
+  font-size: 18px;
+  margin: 0 0 12px;
 }
 
 /* ========= Editor ========= */
@@ -36,9 +36,12 @@ h1 {
   padding-top: 30px;
 
   /* Text behavior */
-  white-space: pre-wrap;    /* tôn trọng \n */
-  word-break: normal;       /* không bẻ giữa từ */
-  overflow-wrap: break-word;/* chỉ bẻ khi quá dài */
+  white-space: pre-wrap;
+  /* tôn trọng \n */
+  word-break: normal;
+  /* không bẻ giữa từ */
+  overflow-wrap: break-word;
+  /* chỉ bẻ khi quá dài */
 
   /* Typography */
   font: 16px/1.6 "Times New Roman", Times, serif;
@@ -49,60 +52,61 @@ h1 {
   transition: background 0.3s, color 0.3s, border-color 0.3s;
 }
 
-#editor:focus { 
-  box-shadow: 0 0 0 3px rgba(0,0,0,.06); 
-  border-color: #bbb; 
+#editor:focus {
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, .06);
+  border-color: #bbb;
 }
 
 /* Nếu lỡ dán HTML có p/div, bỏ margin để không giãn cách bất thường */
-#editor p, 
-#editor div { 
-  margin: 0; 
+#editor p,
+#editor div {
+  margin: 0;
 }
 
 /* ========= Utility (optional) ========= */
-kbd { 
-  border: 1px solid #ccc; 
-  border-bottom-width: 2px; 
-  border-radius: 4px; 
-  padding: 0 4px; 
-  background: #fff; 
+kbd {
+  border: 1px solid #ccc;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
+  background: #fff;
 }
 
-code { 
-  background: #fff; 
-  border: 1px solid #eee; 
-  border-radius: 4px; 
-  padding: 0 4px; 
+code {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 0 4px;
 }
 
 /* ========= Dark Mode ========= */
-body.dark { 
-  background: #1e1e1e; 
-  color: #ddd; 
-  --caret: #ffd60a; /* caret vàng trong dark mode */
+body.dark {
+  background: #1e1e1e;
+  color: #ddd;
+  --caret: #ffd60a;
+  /* caret vàng trong dark mode */
 }
 
-body.dark #editor { 
-  background: #2d2d2d; 
-  color: #f1f1f1; 
-  border-color: #555; 
+body.dark #editor {
+  background: #2d2d2d;
+  color: #f1f1f1;
+  border-color: #555;
 }
 
-body.dark kbd, 
-body.dark code { 
-  background: #333; 
-  border-color: #555; 
-  color: #eee; 
+body.dark kbd,
+body.dark code {
+  background: #333;
+  border-color: #555;
+  color: #eee;
 }
 
 /* ========= Toolbar ========= */
-.toolbar { 
-  display: flex; 
-  gap: 0; 
-  align-items: center; 
-  margin-bottom: 0; 
-  flex-wrap: wrap; 
+.toolbar {
+  display: flex;
+  gap: 0;
+  align-items: center;
+  margin-bottom: 0;
+  flex-wrap: wrap;
 }
 
 .toggle-btn {
@@ -116,84 +120,166 @@ body.dark code {
   transition: background 0.3s, color 0.3s, border-color 0.3s, box-shadow .2s;
 }
 
-.toggle-btn.active { 
-  border-color: #000; 
-  box-shadow: 0 0 0 2px rgba(0,0,0,.08) inset; 
+.toggle-btn.active {
+  border-color: #000;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, .08) inset;
 }
 
-body.dark .toggle-btn { 
-  background: #333; 
-  color: #eee; 
-  border-color: #666; 
+body.dark .toggle-btn {
+  background: #333;
+  color: #eee;
+  border-color: #666;
 }
 
-body.dark .toggle-btn.active { 
-  border-color: #bbb; 
-  box-shadow: 0 0 0 2px rgba(255,255,255,.1) inset; 
+body.dark .toggle-btn.active {
+  border-color: #bbb;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .1) inset;
 }
 
 /* Color picker group */
-.color-wrap { 
-  display: flex; 
-  align-items: center; 
-  gap: 6px; 
+.color-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.color-wrap label { 
-  font-size: 12px; 
-  opacity: .8; 
+.color-wrap label {
+  font-size: 12px;
+  opacity: .8;
 }
 
-input[type="color"] { 
-  width: 36px; 
-  height: 28px; 
-  padding: 0; 
-  border: none; 
-  background: transparent; 
+input[type="color"] {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 /* --- Popup paste --- */
 .modal-backdrop {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.35);
-  display: flex; align-items: center; justify-content: center;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 9999;
 }
 
 .modal {
   width: min(640px, 92vw);
-  background: #fff; color: #000;
-  border: 1px solid #ddd; border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.2);
+  background: #fff;
+  color: #000;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .2);
   overflow: hidden;
 }
-body.dark .modal { background:#2d2d2d; color:#f1f1f1; border-color:#555; }
+
+body.dark .modal {
+  background: #2d2d2d;
+  color: #f1f1f1;
+  border-color: #555;
+}
 
 .modal-header {
-  padding: 0; border-bottom: 1px solid #eee;
+  padding: 0;
+  border-bottom: 1px solid #eee;
 }
-body.dark .modal-header { border-color:#444; }
+
+body.dark .modal-header {
+  border-color: #444;
+}
 
 .modal-body {
   padding: 12px 14px;
 }
+
 .modal-body textarea {
-  width: 100%; min-height: 180px; resize: vertical;
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
   font: 14px/1.6 "Times New Roman", Times, serif;
-  border: 1px solid #ddd; border-radius: 8px; padding: 10px;
-  background: #fff; color:#000;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  color: #000;
 }
-body.dark .modal-body textarea { background:#1f1f1f; color:#f1f1f1; border-color:#555; }
+
+body.dark .modal-body textarea {
+  background: #1f1f1f;
+  color: #f1f1f1;
+  border-color: #555;
+}
 
 .modal-actions {
-  display: flex; gap: 8px; justify-content: flex-end;
-  padding: 10px 14px; border-top: 1px solid #eee;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 10px 14px;
+  border-top: 1px solid #eee;
 }
-body.dark .modal-actions { border-color:#444; }
 
-.btn-small { padding: 4px 8px; font-size: 12px; }
-    
+body.dark .modal-actions {
+  border-color: #444;
+}
+
+.btn-small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
 /* ví dụ thêm vào PracticingSpace.css */
-.picture-frame-wrap { }
-.picture-frame { transition: box-shadow .15s ease; }
-.picture-frame:focus { box-shadow: 0 0 0 2px rgba(59,130,246,.4); }
+.picture-frame {
+  transition: box-shadow .15s ease;
+}
+
+.picture-frame:focus {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, .4);
+}
+
+/* Adjust container to full width and responsive to zoom */
+.wrap.practicing-space-root {
+  width: 100%;
+  max-width: none;
+  padding: clamp(8px, 2vw, 24px);
+}
+
+/* Flexible 12-column layout without constraining children */
+.ps-row {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  align-items: start;
+}
+
+/* Map 12-column layout: 3 | 6 | 3 */
+.col-1 {
+  grid-column: 1 / span 3;
+}
+
+.col-editor {
+  grid-column: 4 / span 6;
+}
+
+.col-4 {
+  grid-column: 10 / span 3;
+}
+
+/* Ensure items do not demand excessive min-content */
+.ps-col {
+  min-width: 0;
+}
+
+/* Stack columns vertically on narrow screens */
+@media (max-width: 1200px) {
+
+  .col-1,
+  .col-editor,
+  .col-4 {
+    grid-column: 1 / -1;
+  }
+}
