@@ -6,6 +6,7 @@ import './PracticingSpace.css';
 import InputModal from '../InputModal/InputModal';
 import Tabbar from '../Tabbar/Tabbar';
 import MirroringSpace from '../MirroringSpace/MirroringSpace';
+import SubMirroringSpace from '../SubMirroringSpace/SubMirroringSpace';
 
 const INITIAL_TEXT = `Ví dụ: Hello [world] and [friends]!
 A link or [placeholder] appears here.] Tiếp tục...`;
@@ -21,8 +22,7 @@ type Token = {
 
 const PracticingSpace: React.FC = () => {
   const edRef = useRef<HTMLDivElement>(null);
-  const rowRef = useRef<HTMLDivElement>(null);           // container để đo chiều rộng
-  const [msWidthPx, setMsWidthPx] = useState(360);       // width cho MirroringSpace (~1/3)
+  const rowRef = useRef<HTMLDivElement>(null);           // container hàng ngang 4 vùng bằng nhau
 
   const [dark, setDark] = useState(true);
   // Toggle: nhấn Space để nhảy tới ']' tiếp theo (mặc định bật để giữ hành vi cũ)
@@ -78,18 +78,6 @@ const PracticingSpace: React.FC = () => {
     document.body.classList.toggle('dark', dark);
     return () => document.body.classList.remove('dark');
   }, [dark]);
-
-  // ====== TÍNH WIDTH ~ 1/3 CHO MIRRORINGSPACE ======
-  useEffect(() => {
-    const recalc = () => {
-      const w = rowRef.current?.clientWidth ?? window.innerWidth;
-      const next = Math.round(w * 0.3333);
-      setMsWidthPx(Math.max(280, next)); // tối thiểu 280px cho dễ dùng
-    };
-    recalc();
-    window.addEventListener('resize', recalc);
-    return () => window.removeEventListener('resize', recalc);
-  }, []);
 
   // ====== Tokenize modes ======
   const NBSP = '\u00A0'; // Non-breaking space
@@ -585,7 +573,7 @@ const PracticingSpace: React.FC = () => {
             if (colorOn) enforceTypingColor();
             recomputeMirror();
           }
-          return; // nếu không có ']' phía trước thì chỉ đơn giản là không làm gì
+          return; // nếu không có ']' trước đó thì chỉ đơn giản là không làm gì
         }
 
         // Phần còn lại:
@@ -733,6 +721,34 @@ const PracticingSpace: React.FC = () => {
     });
   };
 
+  // Đồng bộ tokens/activeIndex vào cả hai store (mirroring & submirror)
+  // để hai panel MirroringSpace/SubMirroringSpace hoạt động y hệt nhau
+  // khi không có preview; khi có preview thì panel tương ứng vẫn sẽ ưu tiên previewTokens.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const mod: any = await import('../../state/mirroring'); // đường dẫn tuỳ theo cấu trúc dự án của bạn
+        if (!cancelled) {
+          const setTokens = mod?.setTokens || mod?.default?.setTokens;
+          if (typeof setTokens === 'function') {
+            setTokens(tokens, activeIndex ?? null);
+          }
+        }
+      } catch { }
+      try {
+        const sub: any = await import('../../state/submirror'); // đường dẫn tuỳ theo cấu trúc dự án của bạn
+        if (!cancelled) {
+          const setTokens = sub?.setTokens || sub?.default?.setTokens;
+          if (typeof setTokens === 'function') {
+            setTokens(tokens, activeIndex ?? null);
+          }
+        }
+      } catch { }
+    })();
+    return () => { cancelled = true; };
+  }, [tokens, activeIndex]);
+
   return (
     <>
       {/* Quy tắc cưỡng chế cỡ chữ cho toàn bộ PracticingSpace */}
@@ -756,18 +772,17 @@ const PracticingSpace: React.FC = () => {
 
         /* ===== Row ngang: Editor (trái ~2/3) + MirroringSpace (phải ~1/3) ===== */
         .ps-row {
-          display: flex;
-          align-items: flex-start;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr); /* 4 cột bằng nhau */
           gap: 16px;
           width: 100%;
+          align-items: start;
         }
-        .ps-left {
-          flex: 1 1 auto;
-          min-width: 0;
-        }
-        .ps-right {
-          flex: 0 0 auto; /* width set bằng inline style theo msWidthPx */
-        }
+        /* Vùng 1, 2-3, 4 theo thứ tự trái -> phải */
+        .ps-col { min-width: 0; }
+        .col-1 { grid-column: 1 / span 1; }
+        .col-editor { grid-column: 2 / span 2; } /* chiếm vùng 2 và 3 */
+        .col-4 { grid-column: 4 / span 1; }
 
         /* Editor */
         #editor {
@@ -912,7 +927,17 @@ const PracticingSpace: React.FC = () => {
 
         {/* ===== HÀNG NGANG: Editor (trái ~2/3) + MirroringSpace (phải ~1/3) ===== */}
         <div className="ps-row" ref={rowRef}>
-          <div className="ps-left">
+          {/* Vùng 1: MirroringSpace */}
+          <div className="ps-col col-1">
+            <MirroringSpace
+              tokens={tokens}
+              activeIndex={activeIndex ?? null}
+              title="Mirroring Space"
+            />
+          </div>
+
+          {/* Vùng 2-3: PracticingSpace (Editor) */}
+          <div className="ps-col col-editor">
             <div
               id="editor"
               ref={edRef}
@@ -922,11 +947,12 @@ const PracticingSpace: React.FC = () => {
             />
           </div>
 
-          <div className="ps-right" style={{ width: msWidthPx }}>
-            <MirroringSpace
-              tokens={tokens}
-              activeIndex={activeIndex ?? null}
-              title="Mirroring Space"
+          {/* Vùng 4: SubMirroringSpace (dùng lại component MirroringSpace) */}
+          <div className="ps-col col-4">
+            <SubMirroringSpace
+              tokens={tokens}                 // giữ nguyên: 2 panel nhận cùng dữ liệu
+              activeIndex={activeIndex ?? null} // follow caret như nhau
+              title="Sub Mirroring Space"
             />
           </div>
         </div>

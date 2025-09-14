@@ -68,7 +68,11 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
 
     // === NEW: state cho mode (0/1) ===
     const [mode, setMode] = useState<0 | 1>(initialMode);
-    const prevOpenRef = useRef<boolean>(false); // Track previous open state
+    // NEW: mirror text (ô văn bản phụ/submirror — optional)
+    const [mirrorText, setMirrorText] = useState<string>('');
+
+    // Theo dõi chuyển trạng thái open (đóng -> mở)
+    const wasOpenRef = useRef<boolean>(false);
 
     useImperativeHandle(ref, () => localTARef.current as HTMLTextAreaElement);
 
@@ -79,14 +83,33 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
       }
     }, [open, autoFocus]);
 
+    // Khi modal chuyển từ đóng -> mở: reset trạng thái cần thiết (và có thể reset mirrorText nếu muốn)
     useEffect(() => {
-      if (open) {
+      if (open && !wasOpenRef.current) {
+        wasOpenRef.current = true;
+        setSendStatus('idle');
+        // Giữ nguyên hoặc reset mirrorText tùy nhu cầu.
+        // Trước đây bạn có reset mỗi lần open; nếu vẫn muốn giữ hành vi cũ thì bật dòng sau:
+        // setMirrorText('');
+
+        // Đồng bộ percent khi mở
         setInternalPercent(
           percentValue !== undefined && !Number.isNaN(percentValue) ? String(percentValue) : ''
         );
-        setSendStatus('idle');
       }
-    }, [open, percentValue]); // Synchronize percentValue when modal opens or changes
+      if (!open && wasOpenRef.current) {
+        wasOpenRef.current = false;
+      }
+    }, [open, percentValue]);
+
+    // Khi percentValue thay đổi trong lúc modal đang mở:
+    // chỉ đồng bộ internalPercent, KHÔNG reset mirrorText.
+    useEffect(() => {
+      if (!open) return;
+      setInternalPercent(
+        percentValue !== undefined && !Number.isNaN(percentValue) ? String(percentValue) : ''
+      );
+    }, [percentValue, open]);
 
     const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
@@ -107,6 +130,7 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
         // (A) ĐẨY TRƯỚC LÊN MIRRORING SPACE (preview)
         try {
           const mod: any = await import('../../state/mirroring');
+          // === Preview cho VĂN BẢN CHÍNH như hiện tại ===
           if (mod?.setPreviewText) {
             // Tiền xử lý văn bản để đảm bảo `<...>` được giữ nguyên
             const processedValue = value.replace(/<[^>]*>/g, (match) => match.replace(/\s+/g, ' '));
@@ -120,6 +144,23 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
           console.warn('Mirroring store not found, skip preview.', e);
         }
 
+        // (A2) ĐẨY LÊN SUB-MIRRORING SPACE (preview) — nếu có module & có dữ liệu mirror
+        try {
+          // Dùng module 'state/submirror'
+          const subMod: any = await import('../../state/submirror');
+          const processedMirror = mirrorText.replace(/<[^>]*>/g, (match) => match.replace(/\s+/g, ' '));
+          if (subMod?.setPreviewText) {
+            subMod.setPreviewText(processedMirror);
+          } else if (subMod?.default?.setPreviewText) {
+            subMod.default.setPreviewText(processedMirror);
+          }
+        } catch (e) {
+          // Không có store subMirroring thì bỏ qua
+          if (mirrorText && mirrorText.trim()) {
+            console.warn('SubMirroring store not found, skip sub preview.', e);
+          }
+        }
+
         const pctNumRaw =
           internalPercent === '' ? 0 : Number.isNaN(Number(internalPercent)) ? 0 : Number(internalPercent);
         const pctNum = clamp(pctNumRaw, percentMin ?? 0, percentMax ?? 100);
@@ -131,6 +172,7 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
           },
           body: JSON.stringify({
             text: value,
+            mirrorText: mirrorText || null, // gửi thêm văn bản mirror (optional)
             percent: pctNum,
             seed: Date.now(),
             mode, // === NEW: gửi mode lên BE ===
@@ -230,6 +272,7 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
               </div>
             </div>
 
+            {/* Ô văn bản chính */}
             <textarea
               ref={localTARef}
               value={value}
@@ -241,6 +284,21 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
                   : placeholder
               }
             />
+
+            {/* Ô văn bản MIRROR (optional) */}
+            <div style={{ marginTop: 12 }}>
+              <label htmlFor="mirrorText" style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
+                Văn bản mirror (tuỳ chọn)
+              </label>
+              <textarea
+                id="mirrorText"
+                value={mirrorText}
+                onChange={(e) => setMirrorText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Dán văn bản mirror (sẽ hiển thị ở SubMirroringSpace, nếu có)"
+                style={{ minHeight: 96 }}
+              />
+            </div>
           </div>
 
           <div className="modal-actions">

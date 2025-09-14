@@ -10,6 +10,14 @@ export interface MirroringSpaceProps {
     className?: string;
     style?: React.CSSProperties;
     title?: string;
+    /** Dùng để chọn module state: 'mirroring' (mặc định) hoặc 'submirror' */
+    stateKind?: 'mirroring' | 'submirror';
+    /**
+     * Tùy biến phần hiển thị bên trong mỗi token.
+     * Nội dung trả về sẽ được render bên trong <span data-idx="..."> cố định
+     * để auto-follow vẫn dùng được.
+     */
+    renderToken?: (args: { token: Token; idx1: number; isActive: boolean }) => React.ReactNode;
 }
 
 const ACTIVE_BG = "var(--ms-active-bg, #fde68a)";
@@ -90,6 +98,8 @@ export default function MirroringSpace({
     className,
     style,
     title = "Mirroring Space",
+    renderToken,
+    stateKind = 'mirroring',
 }: MirroringSpaceProps) {
     const scrollerRef = useRef<HTMLDivElement>(null);
     const headerRef = useRef<HTMLDivElement>(null);
@@ -119,7 +129,11 @@ export default function MirroringSpace({
 
         (async () => {
             try {
-                const mod: any = await import("../../state/mirroring");
+                // Chọn module state theo stateKind (giúp reuse logic cho SubMirroringSpace)
+                const mod: any =
+                    stateKind === 'submirror'
+                        ? await import("../../state/submirror")
+                        : await import("../../state/mirroring");
                 if (cancelled) return;
                 const getState = (mod.getState || mod.default?.getState) as (() => any) | undefined;
                 const subscribe = (mod.subscribe || mod.default?.subscribe) as
@@ -140,7 +154,7 @@ export default function MirroringSpace({
                     });
                 }
             } catch {
-                // có thể chưa có module state/mirroring trong môi trường hiện tại
+                // Handle module import errors
             }
         })();
 
@@ -152,7 +166,7 @@ export default function MirroringSpace({
                 } catch { }
             }
         };
-    }, []);
+    }, [stateKind]);
 
     // Ưu tiên hiển thị previewTokens nếu đang có
     const effectiveTokens =
@@ -169,6 +183,7 @@ export default function MirroringSpace({
             const idx = i + 1;
             const t = effectiveTokens[i];
             const isActive = effectiveActive === idx;
+            const inner = renderToken?.({ token: t, idx1: idx, isActive }) ?? t.word;
             arr.push(
                 <span
                     key={`${t.start}-${t.end}-${idx}`}
@@ -177,13 +192,13 @@ export default function MirroringSpace({
                     style={isActive ? activeWordStyle : wordStyle}
                     className={isActive ? "word active" : "word"}
                 >
-                    {t.word}
+                    {inner}
                 </span>
             );
             if (i < effectiveTokens.length - 1) arr.push(" ");
         }
         return arr;
-    }, [effectiveTokens, effectiveActive]);
+    }, [effectiveTokens, effectiveActive, renderToken]);
 
     // Auto scroll
     useEffect(() => {
