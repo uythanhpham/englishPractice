@@ -4,6 +4,10 @@
 import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import './InputModal.css';
 
+// Khóa lưu localStorage
+const LS_MAIN_KEY = 'inputmodal_main_text';
+const LS_MIRROR_KEY = 'inputmodal_mirror_text'; // (tuỳ chọn) nếu muốn lưu cả mirror
+
 export interface InputModalProps {
   open: boolean;
   title?: string;
@@ -66,9 +70,9 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
     const [internalPercent, setInternalPercent] = useState<string>('');
     const [sendStatus, setSendStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
 
-    // === NEW: state cho mode (0/1) ===
+    // Mode (0/1)
     const [mode, setMode] = useState<0 | 1>(initialMode);
-    // NEW: mirror text (ô văn bản phụ/submirror — optional)
+    // Ô văn bản MIRROR (optional)
     const [mirrorText, setMirrorText] = useState<string>('');
 
     // Theo dõi chuyển trạng thái open (đóng -> mở)
@@ -83,33 +87,55 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
       }
     }, [open, autoFocus]);
 
-    // Khi modal chuyển từ đóng -> mở: reset trạng thái cần thiết (và có thể reset mirrorText nếu muốn)
+    // Khi modal chuyển từ đóng -> mở
     useEffect(() => {
       if (open && !wasOpenRef.current) {
         wasOpenRef.current = true;
         setSendStatus('idle');
-        // Giữ nguyên hoặc reset mirrorText tùy nhu cầu.
-        // Trước đây bạn có reset mỗi lần open; nếu vẫn muốn giữ hành vi cũ thì bật dòng sau:
-        // setMirrorText('');
 
         // Đồng bộ percent khi mở
         setInternalPercent(
           percentValue !== undefined && !Number.isNaN(percentValue) ? String(percentValue) : ''
         );
+
+        // 🧠 Khôi phục nội dung đã lưu (ô A & mirror)
+        try {
+          const savedMain = localStorage.getItem(LS_MAIN_KEY);
+          // Chỉ khôi phục vào ô A nếu parent đang rỗng để tránh ghi đè dữ liệu sẵn có
+          if (savedMain && (!value || value.trim() === '')) {
+            onChange(savedMain);
+          }
+          // (tuỳ chọn) khôi phục mirror
+          const savedMirror = localStorage.getItem(LS_MIRROR_KEY);
+          if (savedMirror !== null) setMirrorText(savedMirror);
+        } catch {}
       }
       if (!open && wasOpenRef.current) {
         wasOpenRef.current = false;
       }
-    }, [open, percentValue]);
+    }, [open, percentValue, onChange, value]);
 
-    // Khi percentValue thay đổi trong lúc modal đang mở:
-    // chỉ đồng bộ internalPercent, KHÔNG reset mirrorText.
+    // Khi percentValue thay đổi trong lúc modal đang mở
     useEffect(() => {
       if (!open) return;
       setInternalPercent(
         percentValue !== undefined && !Number.isNaN(percentValue) ? String(percentValue) : ''
       );
     }, [percentValue, open]);
+
+    // 💾 Lưu ô A (văn bản chính) mỗi khi thay đổi
+    useEffect(() => {
+      try {
+        localStorage.setItem(LS_MAIN_KEY, value ?? '');
+      } catch {}
+    }, [value]);
+
+    // 💾 (tuỳ chọn) lưu ô mirror
+    useEffect(() => {
+      try {
+        localStorage.setItem(LS_MIRROR_KEY, mirrorText ?? '');
+      } catch {}
+    }, [mirrorText]);
 
     const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
@@ -127,26 +153,21 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
       try {
         setSendStatus('sending');
 
-        // (A) ĐẨY TRƯỚC LÊN MIRRORING SPACE (preview)
+        // (A) Preview lên MirroringSpace
         try {
           const mod: any = await import('../../state/mirroring');
-          // === Preview cho VĂN BẢN CHÍNH như hiện tại ===
+          const processedValue = value.replace(/<[^>]*>/g, (match) => match.replace(/\s+/g, ' '));
           if (mod?.setPreviewText) {
-            // Tiền xử lý văn bản để đảm bảo `<...>` được giữ nguyên
-            const processedValue = value.replace(/<[^>]*>/g, (match) => match.replace(/\s+/g, ' '));
             mod.setPreviewText(processedValue);
           } else if (mod?.default?.setPreviewText) {
-            const processedValue = value.replace(/<[^>]*>/g, (match) => match.replace(/\s+/g, ' '));
             mod.default.setPreviewText(processedValue);
           }
         } catch (e) {
-          // Không có store thì bỏ qua, vẫn gửi BE bình thường
           console.warn('Mirroring store not found, skip preview.', e);
         }
 
-        // (A2) ĐẨY LÊN SUB-MIRRORING SPACE (preview) — nếu có module & có dữ liệu mirror
+        // (A2) Preview lên SubMirroringSpace (nếu có)
         try {
-          // Dùng module 'state/submirror'
           const subMod: any = await import('../../state/submirror');
           const processedMirror = mirrorText.replace(/<[^>]*>/g, (match) => match.replace(/\s+/g, ' '));
           if (subMod?.setPreviewText) {
@@ -155,7 +176,6 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
             subMod.default.setPreviewText(processedMirror);
           }
         } catch (e) {
-          // Không có store subMirroring thì bỏ qua
           if (mirrorText && mirrorText.trim()) {
             console.warn('SubMirroring store not found, skip sub preview.', e);
           }
@@ -167,15 +187,13 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
 
         const res = await fetch(convertApiUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             text: value,
-            mirrorText: mirrorText || null, // gửi thêm văn bản mirror (optional)
+            mirrorText: mirrorText || null,
             percent: pctNum,
             seed: Date.now(),
-            mode, // === NEW: gửi mode lên BE ===
+            mode,
           }),
         });
 
@@ -186,22 +204,16 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
 
         setSendStatus('success');
 
-        // (B) Phát kết quả đã chỉnh sửa lên PracticingSpace như bình thường
+        // (B) Gửi kết quả lên PracticingSpace
         if (onReceiveConverted && data?.converted) {
           onReceiveConverted(data.converted);
         }
 
-        // (C) GIỮ PREVIEW để người dùng đối chiếu y nguyên với bản gốc
-        // → Không gọi clearPreview nữa.
-
+        // (C) Giữ preview để đối chiếu
         setTimeout(() => setSendStatus('idle'), 3000);
       } catch (err) {
         console.error(err);
         setSendStatus('error');
-
-        // (D) Lỗi: vẫn GIỮ PREVIEW để người dùng đối chiếu
-        // → Không gọi clearPreview.
-
         setTimeout(() => setSendStatus('idle'), 3000);
       }
     };
@@ -251,7 +263,7 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
               <span className="percent-suffix">%</span>
             </div>
 
-            {/* NEW: hàng chọn Mode 0/1 */}
+            {/* Hàng chọn Mode 0/1 */}
             <div
               className="mode-row"
               style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}
@@ -266,13 +278,11 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
                 Mode: <b>{mode}</b>
               </button>
               <div style={{ fontSize: 12, color: '#666' }}>
-                {mode === 0
-                  ? 'Thay ngẫu nhiên theo từ (\\w+)'
-                  : 'Thay theo cụm <...> rồi gỡ dấu < >'}
+                {mode === 0 ? 'Thay ngẫu nhiên theo từ (\\w+)' : 'Thay theo cụm <...> rồi gỡ dấu < >'}
               </div>
             </div>
 
-            {/* Ô văn bản chính */}
+            {/* Ô văn bản chính (ô A) — đặt ở TRÊN và có auto-save */}
             <textarea
               ref={localTARef}
               value={value}
@@ -285,7 +295,7 @@ const InputModal = React.forwardRef<HTMLTextAreaElement, InputModalProps>(
               }
             />
 
-            {/* Ô văn bản MIRROR (optional) */}
+            {/* Ô văn bản MIRROR (optional) — đặt Ở DƯỚI */}
             <div style={{ marginTop: 12 }}>
               <label htmlFor="mirrorText" style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
                 Văn bản mirror (tuỳ chọn)

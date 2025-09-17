@@ -7,6 +7,13 @@ export interface MirroringSpaceProps {
     tokens?: Token[];
     activeIndex?: number | null;
     follow?: boolean;
+    fillHeight?: boolean;  // NEW: fill 100% height of grid cell
+    /** Force the outer container height (px). Usually the PracticingSpace (editor) height. */
+    syncHeightPx?: number;
+    /** Canh token active theo một hoành độ của viewport (px tính từ top màn hình). */
+    anchorViewportY?: number;
+    /** Khi true (mặc định), luôn canh active token vào giữa khung scroller của MirroringSpace. */
+    centerActive?: boolean;
     className?: string;
     style?: React.CSSProperties;
     title?: string;
@@ -52,7 +59,7 @@ const scrollerStyle: React.CSSProperties = {
     padding: 12,
     overflow: "auto",
     // trước đây: maxHeight: 360,
-    maxHeight: "var(--ms-max-h, clamp(260px, 60vh, 80vh))",
+    maxHeight: 360, // sẽ bị override khi fillHeight=true
     lineHeight: 1.9,
     whiteSpace: "pre-wrap",
     wordWrap: "break-word",
@@ -89,7 +96,7 @@ const overlayStyleBase: React.CSSProperties = {
         "linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0))",
     backdropFilter: "blur(28px)",
     WebkitBackdropFilter: "blur(8px)",
-    pointerEvents: "auto",
+    pointerEvents: "none", // Cho phép cuộn/scroll nội dung bên dưới ngay cả khi overlay hiển thị
     transition: "opacity 0ms ease",
 };
 
@@ -97,6 +104,10 @@ export default function MirroringSpace({
     tokens: tokensFromProps,
     activeIndex: activeFromProps,
     follow = true,
+    fillHeight = false,
+    syncHeightPx,
+    anchorViewportY,
+    centerActive = true,
     className,
     style,
     title = "Mirroring Space",
@@ -203,14 +214,80 @@ export default function MirroringSpace({
     }, [effectiveTokens, effectiveActive, renderToken]);
 
     // Auto scroll
+    // Mặc định: luôn canh active token vào GIỮA scroller (centerActive = true).
+    // Nếu centerActive = false: giữ hành vi cũ dựa trên anchorViewportY (nếu có).
     useEffect(() => {
         if (!follow || effectiveActive == null) return;
         const root = scrollerRef.current;
         if (!root) return;
         const el = root.querySelector<HTMLSpanElement>(`span[data-idx="${effectiveActive}"]`);
         if (!el) return;
-        el.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
-    }, [effectiveActive, follow]);
+
+        // Reveal guard: nếu token rất gần/át đỉnh scroller thì ép scrollTop=0 để không bị khuất.
+        const TOP_REVEAL_PAD = 10; // nên ≤ padding-top của scroller (đang là 12)
+        const getTopInRoot = (node: HTMLElement) => {
+            const nr = node.getBoundingClientRect();
+            const rr = root.getBoundingClientRect();
+            // vị trí top của node tính theo hệ toạ độ content của 'root'
+            return (nr.top - rr.top) + root.scrollTop;
+        };
+
+        // Nhánh A: canh GIỮA khung MirroringSpace (ưu tiên mới)
+        if (centerActive) {
+            // Nếu nội dung không đủ để cuộn thì bỏ qua
+            if (root.scrollHeight <= root.clientHeight) return;
+
+            const elTop = getTopInRoot(el);
+            const elCenter = elTop + el.offsetHeight / 2;
+            const viewCenter = root.scrollTop + root.clientHeight / 2;
+
+            // target scrollTop để elCenter trùng viewCenter
+            let target = root.scrollTop + (elCenter - viewCenter);
+
+            // Clamp vào [0, max]
+            const max = Math.max(0, root.scrollHeight - root.clientHeight);
+            target = Math.max(0, Math.min(target, max));
+
+            // Guard để không bị khuất khi token quá sát đầu
+            if (elTop <= TOP_REVEAL_PAD) target = 0;
+
+            if (Math.abs(target - root.scrollTop) > 0.5) {
+                root.scrollTo({ top: target, behavior: "smooth" });
+            }
+        } else if (typeof anchorViewportY === 'number') {
+            const rect = el.getBoundingClientRect();
+            const centerY = rect.top + rect.height / 2;
+            const delta = centerY - anchorViewportY; // >0: token đang thấp hơn anchor => cuộn xuống
+
+            // Ước lượng scrollTop mong muốn
+            let target = root.scrollTop + delta;
+            // Clamp phạm vi
+            target = Math.max(0, Math.min(target, root.scrollHeight - root.clientHeight));
+
+            // TOP GUARD: nếu bản thân token nằm quá sát đỉnh content, ép về 0 để lộ hoàn toàn
+            const topIn = getTopInRoot(el);
+            if (topIn <= TOP_REVEAL_PAD) {
+                target = 0;
+            }
+
+            // Tránh cuộn vi mô khi không cần
+            if (Math.abs(target - root.scrollTop) > 0.5) {
+                root.scrollTo({ top: target, behavior: "smooth" });
+            }
+        } else {
+            // Fallback: tự tính để đảm bảo "lộ hoàn toàn", ưu tiên đưa lên sát đỉnh nếu cần
+            const elTop = getTopInRoot(el);
+            const elBottom = elTop + el.offsetHeight;
+            const viewTop = root.scrollTop;
+            const viewBottom = viewTop + root.clientHeight;
+
+            if (elTop <= viewTop + TOP_REVEAL_PAD) {
+                root.scrollTo({ top: Math.max(0, elTop - TOP_REVEAL_PAD), behavior: "smooth" });
+            } else if (elBottom >= viewBottom - 4) {
+                root.scrollTo({ top: elBottom - root.clientHeight + 4, behavior: "smooth" });
+            }
+        }
+    }, [effectiveActive, follow, anchorViewportY, centerActive]);
 
     const empty = !effectiveTokens || effectiveTokens.length === 0;
 
@@ -267,11 +344,22 @@ export default function MirroringSpace({
     // Khi overlay bật, blur nội dung; khi tắt Esc, bỏ blur cho rõ chữ
     const contentFilter = overlayVisible ? "blur(6px)" : "none";
 
+    // Tính style container: khi syncHeightPx có mặt, ép chiều cao = editor và bỏ minHeight
+    const containerStyle: React.CSSProperties = {
+        ...containerBaseStyle,
+        ...(fillHeight
+            ? (typeof syncHeightPx === 'number'
+                ? { height: syncHeightPx, minHeight: 0 }
+                : { height: "100%", minHeight: 0 })
+            : {}),
+        ...style
+    };
+
     return (
         <section
             aria-label="Mirroring Space"
             className={className ? `mirroring-space ${className}` : "mirroring-space"}
-            style={{ ...containerBaseStyle, ...style }}
+            style={containerStyle}
         >
             {title ? (
                 <div ref={headerRef} style={headerStyle}>
@@ -295,15 +383,24 @@ export default function MirroringSpace({
                         }}
                         aria-pressed={!escRevealEnabled}
                     >
-                        {escRevealEnabled ? "ESC reveal: ON" : "ESC reveal: OFF"}
+                        {escRevealEnabled ? "ON" : "OFF"}
                     </button>
                 </div>
             ) : null}
 
-            {/* Nội dung với blur có/không tuỳ overlay */}
             <div
                 ref={scrollerRef}
-                style={{ ...scrollerStyle, filter: contentFilter }}
+                style={{
+                    ...scrollerStyle,
+                    filter: contentFilter,
+                    ...(fillHeight
+                        ? {
+                            maxHeight: "unset", // bỏ cap cứng
+                            flex: 1,
+                            minHeight: 0
+                        }
+                        : {})
+                }}
                 aria-hidden={overlayVisible ? true : false}
             >
                 {empty ? (
@@ -319,7 +416,7 @@ export default function MirroringSpace({
                     ...overlayStyleBase,
                     top: headerHeight,
                     opacity: overlayVisible ? 1 : 0,
-                    pointerEvents: overlayVisible ? "auto" : "none",
+                    pointerEvents: "none", // vẫn để pointerEvents "none" để không cản trở thao tác cuộn
                 }}
                 aria-label="Frosted overlay — Hold Esc to reveal text"
                 title={

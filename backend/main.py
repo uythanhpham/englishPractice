@@ -9,9 +9,10 @@ import secrets
 import hashlib
 import random
 import re
+import struct
 from datetime import datetime
 
-app = FastAPI(title="Bracket Converter BE", version="1.7.0")
+app = FastAPI(title="Bracket Converter BE", version="1.7.1")
 
 # Cho phép FE gọi API (bạn nên sửa allow_origins khi deploy thật)
 app.add_middleware(
@@ -145,6 +146,27 @@ def convert_text_mode0(text: str, percent: float, rng: random.Random):
     parts.append(text[last_end:])
     return "".join(parts), total_words, replaced
 
+# ========= NEW: bộ phát U(0,1) “pha trộn” nhiều nguồn từ rng (nhưng vẫn DETERMINISTIC theo seed) =========
+def uniform01_complex(rng: random.Random, salt: int) -> float:
+    """
+    Tạo giá trị ~U(0,1) bằng cách trộn nhiều lần gọi rng với một 'salt' theo ngữ cảnh:
+    - Lấy nhiều khối bit & số thực từ rng
+    - Băm BLAKE2b để khuếch tán -> phân bố đều hơn
+    - Map 53 bit cuối về [0,1)
+    Lưu ý: KHÔNG dùng os.urandom/time để vẫn tái lập được với cùng seed.
+    """
+    b = bytearray()
+    b += rng.getrandbits(64).to_bytes(8, "little", signed=False)
+    b += rng.getrandbits(64).to_bytes(8, "little", signed=False)
+    b += struct.pack("<d", rng.random())
+    b += struct.pack("<d", rng.random())
+    b += (salt & ((1 << 64) - 1)).to_bytes(8, "little", signed=False)
+    h = hashlib.blake2b(b, digest_size=8)
+    val = int.from_bytes(h.digest(), "little", signed=False)
+    # lấy 53 bit để có độ phân giải như double
+    mant53 = val & ((1 << 53) - 1)
+    return mant53 / float(1 << 53)
+
 def convert_text_mode1(text: str, percent: float, rng: random.Random):
     """
     Chỉ mode 1, dùng biến A (0/1):
@@ -168,6 +190,7 @@ def convert_text_mode1(text: str, percent: float, rng: random.Random):
     p = _normalize_p(percent)
     NBSP = "\u00A0"
     A = 1  # trạng thái ban đầu
+    chunk_idx = 0
 
     while i < n:
         ch = text[i]
@@ -176,7 +199,26 @@ def convert_text_mode1(text: str, percent: float, rng: random.Random):
             j = text.find(">", i + 1)
             if j != -1:
                 total_chunks += 1
-                r = rng.uniform(0.0, 1.0)
+                # ===== NEW: Random phức tạp hơn, có ngữ cảnh =====
+                # salt ghép từ vị trí, độ dài cụm và tổng mã ký tự (để đa dạng hoá)
+                seg = text[i + 1 : j]
+                seg_len = j - (i + 1)
+                seg_sum = 0
+                # giới hạn để không tốn thời gian với chuỗi rất dài
+                # (lấy tối đa 1024 ký tự để tính tổng)
+                upto = min(len(seg), 1024)
+                for k in range(upto):
+                    seg_sum = (seg_sum + (ord(seg[k]) & 0xFF)) & 0xFFFFFFFF
+                # hằng số vàng 64-bit để khuếch tán index
+                GOLD = 0x9E3779B97F4A7C15
+                salt = (
+                    ((chunk_idx + 1) * GOLD)
+                    ^ (i * 1315423911)
+                    ^ (j * 2654435761)
+                    ^ ((seg_len & 0xFFFFFFFF) << 17)
+                    ^ seg_sum
+                ) & ((1 << 64) - 1)
+                r = uniform01_complex(rng, salt)
                 if r <= p:
                     # Xóa toàn bộ từ '<' đến '>' (bao gồm cả hai dấu)
                     A = 1
@@ -184,17 +226,15 @@ def convert_text_mode1(text: str, percent: float, rng: random.Random):
                     parts.append("]")
                     i = j + 1
                     replaced_chunks += 1
+                    chunk_idx += 1
                     continue
                 else:
                     # Giữ nguyên cụm '<...>'; qua '>' thì A=1
                     parts.append(text[i:j+1])
                     A = 1
                     i = j + 1
+                    chunk_idx += 1
                     continue
-            # Không tìm thấy '>' => coi '<' như kí tự thường
-            parts.append("<")
-            i += 1
-            continue
         elif ch == ">":
             A = 1
             parts.append(">")

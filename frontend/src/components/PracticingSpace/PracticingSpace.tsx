@@ -11,6 +11,9 @@ import SubMirroringSpace from '../SubMirroringSpace/SubMirroringSpace';
 const INITIAL_TEXT = `Ví dụ: Hello [world] and [friends]!
 A link or [placeholder] appears here.] Tiếp tục...`;
 
+// Đáy tối thiểu (px) cho toàn bộ khung (cả 3 cột)
+const MIN_FRAME_H = 360;
+
 type InputEvt = InputEvent & { isComposing?: boolean; inputType?: string };
 type PasteEvt = ClipboardEvent & { clipboardData: DataTransfer | null };
 
@@ -161,6 +164,24 @@ const PracticingSpace: React.FC = () => {
   // State cho MirroringSpace
   const [tokens, setTokens] = useState<Token[]>([]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // Y (px) trên viewport dùng để canh token active ở 2 panel
+  const [anchorViewportY, setAnchorViewportY] = useState<number>(typeof window !== 'undefined' ? window.innerHeight / 2 : 0);
+
+  // Lấy hoành độ (viewport Y) của caret trong editor; fallback = giữa màn hình
+  const getCaretViewportCenterY = (): number => {
+    const sel = window.getSelection?.();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const rects = range.getClientRects?.();
+      if (rects && rects.length > 0) {
+        const r = rects[0];
+        if (r) return r.top + r.height / 2;
+      }
+      const r2 = range.getBoundingClientRect?.();
+      if (r2) return r2.top + r2.height / 2;
+    }
+    return window.innerHeight / 2;
+  };
 
   const recomputeMirror = () => {
     const el = edRef.current;
@@ -171,6 +192,10 @@ const PracticingSpace: React.FC = () => {
     const caret = getCaretOffset(el);
     const idx = caretToImmutableIndex(text, caret);
     setActiveIndex(idx);
+    // cập nhật anchor Y theo caret hiện tại
+    try {
+      setAnchorViewportY(getCaretViewportCenterY());
+    } catch { }
 
     // Debug: log immutable index
     if (idx != null) console.log('[PracticingSpace] Immutable word index =', idx, '(mode', wordMode, ')');
@@ -303,19 +328,20 @@ const PracticingSpace: React.FC = () => {
     recomputeMirror();
   };
 
-  // Đảm bảo hiển thị dòng trống khi kết thúc bằng '\n'
+  // Đảm bảo cuối editor chỉ có đúng 1 <br data-trailing="1"> khi text kết thúc bằng '\n'
   const ensureTrailingBR = () => {
     const el = edRef.current;
     if (!el) return;
+    // Xóa TẤT CẢ các br trailing do ta đã thêm trước đó
     while (
       el.lastChild &&
       el.lastChild.nodeType === 1 &&
       (el.lastChild as HTMLElement).tagName === 'BR' &&
       (el.lastChild as HTMLElement).getAttribute('data-trailing') === '1'
     ) {
-      if (!el.textContent?.endsWith('\n')) el.removeChild(el.lastChild);
-      else return;
+      el.removeChild(el.lastChild);
     }
+    // Nếu text kết thúc '\n' thì thêm đúng 1 br
     if (el.textContent?.endsWith('\n')) {
       const br = document.createElement('br');
       br.setAttribute('data-trailing', '1');
@@ -453,7 +479,7 @@ const PracticingSpace: React.FC = () => {
     ensureTrailingBR();
     setCaretOffset(el, el.textContent!.length);
 
-    // Ghi nhận số lượng slot từ ban đầu theo định nghĩa [^\s]+
+    // Ghi nhận số lượng slot từ ban đầu
     try {
       const initText = el.textContent ?? '';
       initialWordCountRef.current = tokenize(initText).length; // Replace tokenizeByWhitespace with tokenize
@@ -526,6 +552,19 @@ const PracticingSpace: React.FC = () => {
       el.removeEventListener('compositionupdate', onCompUpdate);
     };
   }, [colorOn, colorHex, wordMode]);
+
+  // Cập nhật anchorViewportY khi scroll/resize
+  useEffect(() => {
+    const onWin = () => {
+      try { setAnchorViewportY(getCaretViewportCenterY()); } catch { }
+    };
+    window.addEventListener('scroll', onWin, { passive: true });
+    window.addEventListener('resize', onWin);
+    return () => {
+      window.removeEventListener('scroll', onWin);
+      window.removeEventListener('resize', onWin);
+    };
+  }, []);
 
   // ===== Helper: nhảy tới ']' kế tiếp (return true nếu nhảy được) =====
   const jumpToNextBracket = (el: HTMLElement): boolean => {
@@ -722,8 +761,6 @@ const PracticingSpace: React.FC = () => {
   };
 
   // Đồng bộ tokens/activeIndex vào cả hai store (mirroring & submirror)
-  // để hai panel MirroringSpace/SubMirroringSpace hoạt động y hệt nhau
-  // khi không có preview; khi có preview thì panel tương ứng vẫn sẽ ưu tiên previewTokens.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -739,15 +776,48 @@ const PracticingSpace: React.FC = () => {
       try {
         const sub: any = await import('../../state/submirror'); // đường dẫn tuỳ theo cấu trúc dự án của bạn
         if (!cancelled) {
-          const setTokens = sub?.setTokens || sub?.default?.setTokens;
-          if (typeof setTokens === 'function') {
-            setTokens(tokens, activeIndex ?? null);
+          const setTokens2 = sub?.setTokens || sub?.default?.setTokens;
+          if (typeof setTokens2 === 'function') {
+            setTokens2(tokens, activeIndex ?? null);
           }
         }
       } catch { }
     })();
     return () => { cancelled = true; };
   }, [tokens, activeIndex]);
+
+  // Chiều cao đồng bộ cho Mirroring/SubMirroring (px)
+  const [msSyncHeight, setMsSyncHeight] = useState<number>(MIN_FRAME_H);
+
+  // Theo dõi chiều cao thực tế của editor để đồng bộ sang MirroringSpace
+  useEffect(() => {
+    const el = edRef.current;
+    if (!el) return;
+
+    // Cập nhật ngay lần đầu (sau mount)
+    const update = () => {
+      // Dùng cả scrollHeight lẫn boundingClientRect để bắt sát chiều cao thực tế
+      const rectH = Math.ceil(el.getBoundingClientRect().height);
+      const scrollH = el.scrollHeight; // phản ánh nội dung bên trong tốt hơn
+      const h = Math.max(MIN_FRAME_H, rectH, scrollH);
+      setMsSyncHeight(h);
+    };
+    update();
+
+    // ResizeObserver theo dõi mọi biến thiên chiều cao
+    // (gõ chữ, dán, đổi font size, thay đổi layout...)
+    const ro = new ResizeObserver(() => update());
+    ro.observe(el);
+
+    // Thêm dự phòng khi window resize
+    const onResize = () => update();
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
 
   return (
     <>
@@ -770,16 +840,20 @@ const PracticingSpace: React.FC = () => {
           min-width: 56px; text-align: center; padding: 4px 8px; border: 1px dashed #aaa; border-radius: 8px;
         }
 
-        /* ===== Row ngang: Editor (trái ~2/3) + MirroringSpace (phải ~1/3) ===== */
+        /* ===== Row ngang: Mirroring (1) + Editor (2-3) + SubMirroring (4) ===== */
         .ps-row {
           display: grid;
           grid-template-columns: repeat(4, 1fr); /* 4 cột bằng nhau */
           gap: 16px;
           width: 100%;
-          align-items: start;
+          align-items: stretch; /* tất cả item cao bằng hàng (editor làm chuẩn) */
         }
         /* Vùng 1, 2-3, 4 theo thứ tự trái -> phải */
-        .ps-col { min-width: 0; }
+        .ps-col { 
+          min-width: 0; 
+          display: flex;                /* cho con bên trong fill 100% */
+          min-height: var(--ps-min-h, 360px); /* đáy tối thiểu cho mỗi cột */
+        }
         .col-1 { grid-column: 1 / span 1; }
         .col-editor { grid-column: 2 / span 2; } /* chiếm vùng 2 và 3 */
         .col-4 { grid-column: 4 / span 1; }
@@ -787,12 +861,18 @@ const PracticingSpace: React.FC = () => {
         /* Editor */
         #editor {
           width: 100%;
-          min-height: 360px;
+          min-height: var(--ps-min-h, 360px);   /* đáy tối thiểu của editor */
           padding: 12px;
           border: 1px solid #ddd;
           border-radius: 10px;
           outline: none;
           background: #fff;
+          /* Căn đều như Word */
+          text-align: justify;
+          /* Tăng chất lượng justify, hạn chế chữ tràn dòng */
+          text-justify: inter-word;
+          overflow-wrap: break-word;    /* alias: word-wrap: break-word */
+          hyphens: auto;                /* tự ngắt bằng dấu gạch nếu khả dụng */
         }
         body.dark #editor {
           background: #111;
@@ -830,7 +910,7 @@ const PracticingSpace: React.FC = () => {
           background: #222; color: #fff; border-color: #333;
         }
 
-        /* Nút tròn bật/tắt Space→] */
+        /* Nút tròn bật/tắt chế độ Space→] */
         .space-toggle-btn {
           width: 28px; height: 28px;
           border-radius: 9999px;
@@ -871,7 +951,10 @@ const PracticingSpace: React.FC = () => {
 
       <div
         className="wrap practicing-space-root"
-        style={{ ['--ps-font-size' as any]: `${fontPx}px` }}
+        style={{
+          ['--ps-font-size' as any]: `${fontPx}px`,
+          ['--ps-min-h' as any]: `${MIN_FRAME_H}px`,
+        }}
       >
         {/* Tabbar + nút tròn */}
         <div className="ps-topbar">
@@ -911,7 +994,7 @@ const PracticingSpace: React.FC = () => {
               "  • Ký tự vách không nhận index."
             }
             aria-pressed={wordMode === 1}
-            onClick={() => setWordMode((m: 0 | 1) => (m === 0 ? 1 : 0))} // Explicitly type `m` to avoid implicit `any` type
+            onClick={() => setWordMode((m: 0 | 1) => (m === 0 ? 1 : 0))}
           >
             {wordMode === 0 ? 'M0' : 'M1'}
           </button>
@@ -925,14 +1008,19 @@ const PracticingSpace: React.FC = () => {
           <button type="button" onClick={resetFont} title="Đưa về mặc định 14px">Reset</button>
         </div>
 
-        {/* ===== HÀNG NGANG: Editor (trái ~2/3) + MirroringSpace (phải ~1/3) ===== */}
+        {/* ===== HÀNG NGANG: Mirroring (1) + Editor (2-3) + SubMirroring (4) ===== */}
         <div className="ps-row" ref={rowRef}>
           {/* Vùng 1: MirroringSpace */}
           <div className="ps-col col-1">
             <MirroringSpace
               tokens={tokens}
               activeIndex={activeIndex ?? null}
+              fillHeight
+              syncHeightPx={msSyncHeight}
+              anchorViewportY={anchorViewportY}
               title="Mirroring Space"
+              /* Căn đều & đảm bảo đáy tối thiểu cho khung mirroring */
+              style={{ textAlign: 'justify', minHeight: MIN_FRAME_H }}
             />
           </div>
 
@@ -950,9 +1038,13 @@ const PracticingSpace: React.FC = () => {
           {/* Vùng 4: SubMirroringSpace (dùng lại component MirroringSpace) */}
           <div className="ps-col col-4">
             <SubMirroringSpace
-              tokens={tokens}                 // giữ nguyên: 2 panel nhận cùng dữ liệu
-              activeIndex={activeIndex ?? null} // follow caret như nhau
+              tokens={tokens}
+              activeIndex={activeIndex ?? null}
+              fillHeight
+              syncHeightPx={msSyncHeight}
+              anchorViewportY={anchorViewportY}
               title="Sub Mirroring Space"
+              style={{ textAlign: 'justify', minHeight: MIN_FRAME_H }}
             />
           </div>
         </div>
